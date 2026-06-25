@@ -264,7 +264,7 @@ function Library:CreateWindow(cfg)
         Name = "Window",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(600, 400),
+        Size = UDim2.fromOffset(500, 400),
         BackgroundColor3 = Theme.Bg,
         GroupTransparency = 0,
         Parent = gui,
@@ -1721,73 +1721,5 @@ function Library:CreateWindow(cfg)
 
     return Window
 end -- CreateWindow
-
---===================================================================================--
---                                   EXAMPLE                                           --
---===================================================================================--
-local Window = Library:CreateWindow({
-    Title = "MOROLUMINA.lua v2.0 (Emerald Ed.)",
-    ToggleKey = Enum.KeyCode.RightShift,
-})
-
--- PLAYER TAB ----------------------------------------------------------------------
-local player = Window:CreateTab({ Name = "Player", Icon = "rbxassetid://3926307971" })
-local pm = player:CreateSection({ Name = "Player Module" })
-pm:AddSlider({ Name = "WalkSpeed", Min = 16, Max = 200, Default = 35, Flag = "WalkSpeed",
-    Callback = function(v)
-        local c = LocalPlayer.Character
-        if c and c:FindFirstChild("Humanoid") then c.Humanoid.WalkSpeed = v end
-    end })
-pm:AddSlider({ Name = "JumpPower", Min = 50, Max = 300, Default = 80, Flag = "JumpPower",
-    Callback = function(v)
-        local c = LocalPlayer.Character
-        if c and c:FindFirstChild("Humanoid") then c.Humanoid.JumpPower = v end
-    end })
-pm:AddSlider({ Name = "FOV", Min = 70, Max = 120, Default = 110, Flag = "FOV",
-    Callback = function(v) workspace.CurrentCamera.FieldOfView = v end })
-
-player:Column("right")
-local scripts = player:CreateSection({ Name = "Game Scripts" })
-scripts:AddKeybind({ Name = "GUI Toggle", Default = Enum.KeyCode.RightShift,
-    Callback = function() Window:Toggle() end })
-scripts:AddButton({ Name = "Unload Menu", Primary = true, Callback = function()
-    Window.Gui:Destroy()
-end })
-scripts:AddButton({ Name = "Rejoin Server", Callback = function()
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
-end })
-
--- VISUALS TAB ---------------------------------------------------------------------
-local visuals = Window:CreateTab({ Name = "Visuals", Icon = "rbxassetid://3926305904" })
-local vis = visuals:CreateSection({ Name = "Visuals" })
-vis:AddToggle({ Name = "ESP", Flag = "ESP", Callback = function(v) print("ESP:", v) end })
-vis:AddToggle({ Name = "Aimbot", Flag = "Aimbot" })
-vis:AddToggle({ Name = "Auto-Farm", Flag = "AutoFarm" })
-vis:AddToggle({ Name = "God Mode", Flag = "GodMode" })
-vis:AddDropdown({ Name = "Teleport Loc", Sub = "Choose a location", Default = "City Hall",
-    Options = {"City Hall","Bank","Police HQ","Garage","Spawn"} })
-vis:AddDropdown({ Name = "Vehicle Spawn", Default = "Lambor",
-    Options = {"Lambor","Bugatti","Police Car","Motorcycle"} })
-vis:AddSlider({ Name = "Aimbot FOV", Min = 30, Max = 360, Default = 120, Flag = "AimFOV" })
-vis:AddColorPicker({ Name = "Color Picker", Default = Color3.fromRGB(0, 225, 134), Flag = "ESPColor" })
-
--- WORLD TAB -----------------------------------------------------------------------
-local world = Window:CreateTab({ Name = "World", Icon = "rbxassetid://3926305904" })
-local env = world:CreateSection({ Name = "Environment" })
-env:AddSlider({ Name = "Time", Min = 0, Max = 24, Default = 14, Flag = "Time",
-    Callback = function(v) game.Lighting.ClockTime = v end })
-env:AddToggle({ Name = "Fullbright", Flag = "Fullbright" })
-
--- CREDITS + SETTINGS --------------------------------------------------------------
-local credits = Window:CreateTab({ Name = "Credits", Icon = "rbxassetid://3926305904" })
-local cred = credits:CreateSection({ Name = "About" })
-cred:AddLabel("MoroLumina UI Framework v2.0")
-cred:AddLabel("Emerald Edition")
-cred:AddLabel("Built from scratch — full custom lib.")
-
-Window:AddSettingsTab()
-
--- auto-load last config + welcome
-Window:Notify({ Title = "MoroLumina", Content = "Loaded successfully. Press RightShift to toggle.", Type = "Success", Duration = 5 })
 
 return Library
