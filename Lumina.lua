@@ -1917,9 +1917,6 @@ function Library:CreateWindow(cfg)
         -- статус автозагрузки
         autoLabel = cfgSec:AddLabel("Auto-Load: " .. (Library:GetAutoLoad() or "none"))
 
-        -- статус автозагрузки
-        autoLabel = cfgSec:AddLabel("Auto-Load: " .. (Library:GetAutoLoad() or "none"))
-
         -- автозагрузка при старте (срабатывает один раз)
         task.spawn(function()
             task.wait(0.5)
