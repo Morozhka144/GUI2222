@@ -61,7 +61,7 @@ local TW = {
 --===================================================================================--
 --                              HELPER FUNCTIONS                                       --
 --===================================================================================--
-local function create(class, props, children)
+local function (class, props, children)
     local obj = Instance.new(class)
     for k, v in pairs(props or {}) do
         if k ~= "Parent" then obj[k] = v end
@@ -264,7 +264,7 @@ function Library:CreateWindow(cfg)
         Name = "Window",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(820, 540),
+        Size = UDim2.fromOffset(600, 400),
         BackgroundColor3 = Theme.Bg,
         GroupTransparency = 0,
         Parent = gui,
