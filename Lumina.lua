@@ -273,6 +273,31 @@ function Library:CreateWindow(cfg)
     stroke(canvas, Theme.Stroke, 1.5)
     local winScale = create("UIScale", { Scale = 1, Parent = canvas })
 
+    -- accent glow (свечение вокруг меню)
+    local glow = create("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://6014261993",
+        ImageColor3 = Theme.Accent,
+        ImageTransparency = 0.6,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49,49,450,450),
+        Size = UDim2.new(1, 50, 1, 50),
+        Position = UDim2.new(0, -25, 0, -25),
+        ZIndex = 0,
+        Parent = canvas,
+    })
+    registerAccent(glow, "ImageColor3")
+
+    -- лёгкая пульсация свечения
+    task.spawn(function()
+        while glow.Parent do
+            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.45 })
+            task.wait(1.8)
+            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.7 })
+            task.wait(1.8)
+        end
+    end)
+
     -- shadow
     create("ImageLabel", {
         BackgroundTransparency = 1,
@@ -488,47 +513,56 @@ function Library:CreateWindow(cfg)
 
     --========================= MOBILE FLOAT BUTTON =========================--
     do
-        -- 1) СНАЧАЛА создаём кнопку
         local fab = create("TextButton", {
-            Name = "MobileFAB",
-            BackgroundColor3 = Theme.Accent,
+            Name = "OpenButton",
+            BackgroundColor3 = Theme.Bg,            -- чёрный фон как у меню
             Position = UDim2.new(0, 20, 0, 120),
-            Size = UDim2.fromOffset(48, 48),
-            Text = "",
+            Size = UDim2.fromOffset(90, 36),        -- прямоугольная
+            Text = "OPEN",
+            TextColor3 = Theme.Accent,              -- зелёный текст
+            Font = Theme.FontBold,
+            TextSize = 14,
             AutoButtonColor = false,
             ZIndex = 50,
-            Parent = Window.Gui,   -- родитель ScreenGui, а НЕ canvas (чтобы не пропал при сворачивании)
+            Parent = Window.Gui,
         })
-        corner(fab, 24)
-        stroke(fab, Theme.StrokeLight, 1, 0.3)
-        if registerAccent then registerAccent(fab, "BackgroundColor3") end
+        corner(fab, 8)                              -- скруглённый прямоугольник как меню
+        local fabStroke = stroke(fab, Theme.Accent, 1.5, 0)   -- зелёная обводка
+        registerAccent(fabStroke, "Color")
+        registerAccent(fab, "TextColor3")
 
-        local icon = create("ImageLabel", {
+        -- свечение вокруг кнопки
+        create("ImageLabel", {
             BackgroundTransparency = 1,
-            Image = "rbxassetid://3926305904",
-            ImageRectOffset = Vector2.new(764, 244),
-            ImageRectSize = Vector2.new(36, 36),
-            ImageColor3 = Theme.Bg,
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(26, 26),
-            ZIndex = 51,
+            Image = "rbxassetid://6014261993",
+            ImageColor3 = Theme.Accent,
+            ImageTransparency = 0.7,
+            ScaleType = Enum.ScaleType.Slice,
+            SliceCenter = Rect.new(49,49,450,450),
+            Size = UDim2.new(1, 30, 1, 30),
+            Position = UDim2.new(0, -15, 0, -15),
+            ZIndex = 49,
             Parent = fab,
         })
 
-        -- показываем только на мобильных (по желанию)
-        fab.Visible = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+        -- показываем на всех устройствах (убери условие если хочешь только моб.)
+        fab.Visible = true
 
-        -- 2) ТЕПЕРЬ вешаем события (fab гарантированно существует)
+        fab.MouseEnter:Connect(function()
+            tween(fab, TW.Fast, { BackgroundColor3 = Theme.Bg2 })
+        end)
+        fab.MouseLeave:Connect(function()
+            tween(fab, TW.Fast, { BackgroundColor3 = Theme.Bg })
+        end)
+        addClickEffect(fab, 0.95)
+
         local fdrag, fStart, fStartPos, fMoved = false, nil, nil, false
 
         fab.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1
             or i.UserInputType == Enum.UserInputType.Touch then
-                fdrag = true
-                fMoved = false
-                fStart = i.Position
-                fStartPos = fab.Position
+                fdrag = true; fMoved = false
+                fStart = i.Position; fStartPos = fab.Position
             end
         end)
 
@@ -537,19 +571,14 @@ function Library:CreateWindow(cfg)
             or i.UserInputType == Enum.UserInputType.Touch) then
                 local d = i.Position - fStart
                 if d.Magnitude > 4 then fMoved = true end
-                fab.Position = UDim2.new(
-                    0, fStartPos.X.Offset + d.X,
-                    0, fStartPos.Y.Offset + d.Y
-                )
+                fab.Position = UDim2.new(0, fStartPos.X.Offset + d.X, 0, fStartPos.Y.Offset + d.Y)
             end
         end)
 
         UserInputService.InputEnded:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1
             or i.UserInputType == Enum.UserInputType.Touch then
-                if fdrag and not fMoved then
-                    Window:Toggle()   -- тап без движения = открыть/закрыть меню
-                end
+                if fdrag and not fMoved then Window:Toggle() end
                 fdrag = false
             end
         end)
@@ -601,35 +630,50 @@ function Library:CreateWindow(cfg)
         corner(card, 10)
         stroke(card, Theme.StrokeLight, 1, 0.4)
         local cardScale = create("UIScale", { Scale = 0.8, Parent = card })
-        padding(card, nil, 10, 10, 12, 12)
 
-        create("Frame", { -- accent bar
-            BackgroundColor3 = col, BorderSizePixel = 0,
-            Size = UDim2.new(0, 3, 1, -8), Position = UDim2.new(0, -8, 0, 4),
+        -- внутренние отступы
+        create("UIPadding", {
+            PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
+            PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 12),
             Parent = card,
-        }).Parent = card
+        })
 
-        local title = create("TextLabel", {
+        -- вертикальный layout внутри карточки
+        create("UIListLayout", {
+            FillDirection = Enum.FillDirection.Vertical,
+            SortOrder = Enum.SortOrder.LayoutOrder,
+            Padding = UDim.new(0, 4),
+            Parent = card,
+        })
+
+        -- accent-полоса слева
+        create("Frame", {
+            BackgroundColor3 = col, BorderSizePixel = 0,
+            Size = UDim2.new(0, 3, 1, -8), Position = UDim2.new(0, -10, 0, 4),
+            ZIndex = 2, Parent = card,
+        })
+
+        create("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, -10, 0, 18),
+            Size = UDim2.new(1, 0, 0, 18),
+            AutomaticSize = Enum.AutomaticSize.None,
             Text = n.Title or "Notification",
             TextColor3 = col, Font = Theme.FontBold, TextSize = 14,
             TextXAlignment = Enum.TextXAlignment.Left,
-            Parent = card,
+            LayoutOrder = 1, Parent = card,
         })
-        local content = create("TextLabel", {
+
+        create("TextLabel", {
             BackgroundTransparency = 1,
-            Position = UDim2.fromOffset(0, 20),
-            Size = UDim2.new(1, -10, 0, 0),
+            Size = UDim2.new(1, 0, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             Text = n.Content or "",
             TextColor3 = Theme.SubText, Font = Theme.Font, TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
             TextWrapped = true,
-            Parent = card,
+            LayoutOrder = 2, Parent = card,
         })
-        create("UIListLayout", { Padding = UDim.new(0, 2), Parent = card })
-        title.LayoutOrder = 1; content.LayoutOrder = 2
 
         tween(card, TW.Normal, { BackgroundTransparency = 0 })
         tween(cardScale, TW.Spring, { Scale = 1 })
@@ -859,9 +903,14 @@ function Library:CreateWindow(cfg)
             --                            LABEL                                      --
             --=====================================================================--
             function Section:AddLabel(text)
-                local f = row(20)
+                local f = row(28)
+                f.BackgroundColor3 = Theme.Element
+                f.BackgroundTransparency = 0.4
+                corner(f, 6)
+                stroke(f, Theme.StrokeLight, 1, 0.4)   -- лёгкая обводка
                 local lbl = create("TextLabel", {
-                    BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0),
+                    BackgroundTransparency = 1, Size = UDim2.new(1,-16,1,0),
+                    Position = UDim2.fromOffset(8, 0),
                     Text = text, TextColor3 = Theme.SubText,
                     Font = Theme.Font, TextSize = 13,
                     TextXAlignment = Enum.TextXAlignment.Left, Parent = f,
@@ -1055,11 +1104,9 @@ function Library:CreateWindow(cfg)
 
                 local listFrame = create("Frame", {
                     BackgroundColor3 = Theme.Bg,
-                    AnchorPoint = Vector2.new(1, 0),
-                    Position = UDim2.new(1, 0, 0.5, 18),
-                    Size = UDim2.fromOffset(140, 0),
+                    Size = UDim2.new(1, 0, 0, 0),
                     ClipsDescendants = true, Visible = false,
-                    ZIndex = 50, Parent = f,
+                    LayoutOrder = nextOrder(), Parent = box,   -- ← child секции, толкает остальные
                 })
                 corner(listFrame, 6); stroke(listFrame, Theme.StrokeLight, 1, 0.2)
                 local listLayout = create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = listFrame })
@@ -1084,7 +1131,7 @@ function Library:CreateWindow(cfg)
                             end
                             open = false
                             tween(arrow, TW.Fast, { Rotation = 0 })
-                            tween(listFrame, TW.Fast, { Size = UDim2.fromOffset(140, 0) })
+                            tween(listFrame, TW.Fast, { Size = UDim2.new(1, 0, 0, 0) })
                             task.delay(0.15, function() if not open then listFrame.Visible = false end end)
                             if o.Callback then task.spawn(o.Callback, opt) end
                         end)
@@ -1098,10 +1145,10 @@ function Library:CreateWindow(cfg)
                         listFrame.Visible = true
                         local h = math.min(#options * 26, 160)
                         tween(arrow, TW.Fast, { Rotation = 180 })
-                        tween(listFrame, TW.Normal, { Size = UDim2.fromOffset(140, h) })
+                        tween(listFrame, TW.Normal, { Size = UDim2.new(1, 0, 0, h) })
                     else
                         tween(arrow, TW.Fast, { Rotation = 0 })
-                        tween(listFrame, TW.Fast, { Size = UDim2.fromOffset(140, 0) })
+                        tween(listFrame, TW.Fast, { Size = UDim2.new(1, 0, 0, 0) })
                         task.delay(0.15, function() if not open then listFrame.Visible = false end end)
                     end
                 end)
