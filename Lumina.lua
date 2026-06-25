@@ -61,7 +61,7 @@ local TW = {
 --===================================================================================--
 --                              HELPER FUNCTIONS                                       --
 --===================================================================================--
-local function (class, props, children)
+local function create(class, props, children)
     local obj = Instance.new(class)
     for k, v in pairs(props or {}) do
         if k ~= "Parent" then obj[k] = v end
