@@ -270,35 +270,39 @@ function Library:CreateWindow(cfg)
         Parent = gui,
     })
     corner(canvas, 14)
-    stroke(canvas, Theme.Stroke, 1.5)
     local winScale = create("UIScale", { Scale = 1, Parent = canvas })
 
-    -- accent glow (свечение вокруг меню)
-    local glow = create("ImageLabel", {
+    -- Контейнер для эффектов позади окна (НЕ внутри CanvasGroup!)
+    local fxHolder = create("Frame", {
+        Name = "FXHolder",
         BackgroundTransparency = 1,
-        Image = "rbxassetid://6014261993",
-        ImageColor3 = Theme.Accent,
-        ImageTransparency = 0.6,
-        ScaleType = Enum.ScaleType.Slice,
-        SliceCenter = Rect.new(49,49,450,450),
-        Size = UDim2.new(1, 50, 1, 50),
-        Position = UDim2.new(0, -25, 0, -25),
-        ZIndex = 0,
-        Parent = canvas,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = canvas.Position,
+        Size = canvas.Size,
+        ZIndex = canvas.ZIndex - 1,
+        Parent = gui,
     })
-    registerAccent(glow, "ImageColor3")
 
-    -- лёгкая пульсация свечения
-    task.spawn(function()
-        while glow.Parent do
-            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.45 })
-            task.wait(1.8)
-            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.7 })
-            task.wait(1.8)
-        end
-    end)
+    -- серая обводка окна (как отдельный эффект, гаснет синхронно)
+    local borderFrame = create("Frame", {
+        Name = "Border",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        Position = UDim2.new(0, 0, 0, 0),
+        Parent = fxHolder,
+    })
+    corner(borderFrame, 14)
+    stroke(borderFrame, Theme.Stroke, 1.5, 0)
 
-    -- shadow
+    -- держим fxHolder под canvas по позиции/размеру
+    local function syncFX()
+        fxHolder.Position = canvas.Position
+        fxHolder.Size = canvas.Size
+    end
+    canvas:GetPropertyChangedSignal("Position"):Connect(syncFX)
+    canvas:GetPropertyChangedSignal("Size"):Connect(syncFX)
+
+    -- тень (чёрная)
     create("ImageLabel", {
         BackgroundTransparency = 1,
         Image = "rbxassetid://6014261993",
@@ -308,9 +312,32 @@ function Library:CreateWindow(cfg)
         SliceCenter = Rect.new(49,49,450,450),
         Size = UDim2.new(1, 60, 1, 60),
         Position = UDim2.new(0, -30, 0, -30),
-        ZIndex = 0,
-        Parent = canvas,
+        Parent = fxHolder,
     })
+
+    -- свечение (зелёное, под тенью)
+    local glow = create("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://6014261993",
+        ImageColor3 = Theme.Accent,
+        ImageTransparency = 0.6,
+        ScaleType = Enum.ScaleType.Slice,
+        SliceCenter = Rect.new(49,49,450,450),
+        Size = UDim2.new(1, 50, 1, 50),
+        Position = UDim2.new(0, -25, 0, -25),
+        Parent = fxHolder,
+    })
+    registerAccent(glow, "ImageColor3")
+
+    -- мягкая пульсация свечения
+    task.spawn(function()
+        while glow.Parent do
+            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.45 })
+            task.wait(1.8)
+            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.7 })
+            task.wait(1.8)
+        end
+    end)
 
     --========================= TOP BAR =========================--
     local topbar = create("Frame", {
@@ -491,16 +518,35 @@ function Library:CreateWindow(cfg)
     function Window:Toggle(state)
         if state == nil then state = not isOpen end
         isOpen = state
+
+        local borderStroke = borderFrame:FindFirstChildOfClass("UIStroke")
+
         if isOpen then
             canvas.Visible = true
+            fxHolder.Visible = true
             winScale.Scale = 0.95
             tween(winScale, TW.Slow, { Scale = 1 })
             tween(canvas, TW.Normal, { GroupTransparency = 0 })
+            for _, ch in ipairs(fxHolder:GetChildren()) do
+                if ch:IsA("ImageLabel") then
+                    tween(ch, TW.Normal, { ImageTransparency = ch.ImageColor3 == Color3.new(0,0,0) and 0.4 or 0.6 })
+                end
+            end
+            if borderStroke then tween(borderStroke, TW.Normal, { Transparency = 0 }) end
         else
             tween(winScale, TW.Normal, { Scale = 0.95 })
+            for _, ch in ipairs(fxHolder:GetChildren()) do
+                if ch:IsA("ImageLabel") then
+                    tween(ch, TW.Normal, { ImageTransparency = 1 })
+                end
+            end
+            if borderStroke then tween(borderStroke, TW.Normal, { Transparency = 1 }) end
             local t = tween(canvas, TW.Normal, { GroupTransparency = 1 })
             t.Completed:Connect(function()
-                if not isOpen then canvas.Visible = false end
+                if not isOpen then
+                    canvas.Visible = false
+                    fxHolder.Visible = false
+                end
             end)
         end
     end
@@ -839,6 +885,7 @@ function Library:CreateWindow(cfg)
                 Parent = parent,
             })
             corner(box, 12)
+            local boxStroke = stroke(box, Theme.Accent, 1, 0.5)
             stroke(box, Theme.Stroke, 1)
             padding(box, nil, 10, 10, 12, 12)
             create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = box })
