@@ -1,29 +1,27 @@
---[[ 
-    MoroLumina UI Framework — Emerald Edition
-    Professional, modern, rich-featured UI Library styled like izen.lol bypass page.
-    Pure Luau, TweenService, and standard GuiObjects.
-]]
-
+--[[ MoroLumina UI — Emerald Edition (Visual Upgrade - izen.lol Style) ]]--
 local Library = {}
 Library.__index = Library
-
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui          = game:GetService("CoreGui")
 local Players          = game:GetService("Players")
 
+-- 🎨 VISUAL UPGRADE - Darker, premium colors like izen.lol
 local Theme = {
-    Background    = Color3.fromRGB(8, 8, 8),
-    BackgroundAlt = Color3.fromRGB(12, 12, 12),
-    Element       = Color3.fromRGB(18, 18, 18),
-    ElementHover  = Color3.fromRGB(24, 24, 24),
-    Stroke        = Color3.fromRGB(30, 35, 32),
-    StrokeAccent  = Color3.fromRGB(0, 225, 134),
-    Accent        = Color3.fromRGB(0, 225, 134),
-    Text          = Color3.fromRGB(235, 235, 235),
-    TextDim       = Color3.fromRGB(140, 145, 145),
-    Glow          = Color3.fromRGB(0, 225, 134),
-    Font          = Enum.Font.Gotham,
+    Background    = Color3.fromRGB(8, 8, 8),        -- Darker near-black
+    BackgroundAlt = Color3.fromRGB(10, 10, 10),     -- Slightly lighter
+    Element       = Color3.fromRGB(15, 15, 15),     -- Elements
+    ElementHover  = Color3.fromRGB(22, 22, 22),     -- Hover state
+    Section       = Color3.fromRGB(12, 12, 12),     -- Sections/inputs
+    Stroke        = Color3.fromRGB(28, 28, 28),     -- Borders
+    StrokeAccent  = Color3.fromRGB(0, 225, 134),    -- Emerald accent
+    Accent        = Color3.fromRGB(0, 225, 134),    -- Primary accent
+    AccentDim     = Color3.fromRGB(0, 180, 107),    -- Dimmed accent
+    ToggleOff     = Color3.fromRGB(35, 35, 35),     -- Toggle off state
+    Text          = Color3.fromRGB(245, 245, 245),  -- Primary text
+    TextDim       = Color3.fromRGB(130, 135, 135),  -- Secondary text
+    Glow          = Color3.fromRGB(0, 225, 134),    -- Glow effect
+    Font          = Enum.Font.GothamMedium,
     FontBold      = Enum.Font.GothamBold,
 }
 
@@ -31,6 +29,7 @@ local TW = {
     Fast   = TweenInfo.new(0.15, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out),
     Normal = TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
     Slow   = TweenInfo.new(0.4,  Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+    Bounce = TweenInfo.new(0.35, Enum.EasingStyle.Back,  Enum.EasingDirection.Out),
 }
 
 local function create(class, props, children)
@@ -44,27 +43,49 @@ end
 local function corner(p, r) return create("UICorner", {CornerRadius=UDim.new(0,r or 12), Parent=p}) end
 local function stroke(p, c, t, tr) return create("UIStroke", {Color=c or Theme.Stroke, Thickness=t or 1, Transparency=tr or 0, ApplyStrokeMode=Enum.ApplyStrokeMode.Border, Parent=p}) end
 local function padding(p, a) return create("UIPadding", {PaddingTop=UDim.new(0,a),PaddingBottom=UDim.new(0,a),PaddingLeft=UDim.new(0,a),PaddingRight=UDim.new(0,a), Parent=p}) end
+local function gradient(p, c1, c2, rot)
+    return create("UIGradient", {
+        Color = ColorSequence.new(c1 or Theme.Element, c2 or Theme.BackgroundAlt),
+        Rotation = rot or 90, Parent = p,
+    })
+end
 
-local function addGlow(parent)
+-- 🌟 Enhanced glow effect
+local function addGlow(parent, intensity)
+    intensity = intensity or 0.85
     return create("ImageLabel", {
         Name="Glow", BackgroundTransparency=1,
-        Image="rbxassetid://5028857084", ImageColor3=Theme.Glow, ImageTransparency=0.9,
+        Image="rbxassetid://5028857084", ImageColor3=Theme.Glow, ImageTransparency=intensity,
         ScaleType=Enum.ScaleType.Slice, SliceCenter=Rect.new(24,24,276,276),
-        Size=UDim2.new(1,60,1,60), Position=UDim2.new(0,-30,0,-30), ZIndex=0, Parent=parent,
+        Size=UDim2.new(1,80,1,80), Position=UDim2.new(0,-40,0,-40), ZIndex=0, Parent=parent,
     })
 end
 
 local function ripple(button)
+    local s = button:FindFirstChildOfClass("UIStroke")
     button.MouseEnter:Connect(function()
+        if s then TweenService:Create(s, TW.Fast, {Color=Theme.StrokeAccent, Transparency=0.3}):Play() end
         TweenService:Create(button, TW.Fast, {BackgroundColor3=Theme.ElementHover}):Play()
     end)
     button.MouseLeave:Connect(function()
+        if s then TweenService:Create(s, TW.Fast, {Color=Theme.Stroke, Transparency=0}):Play() end
         TweenService:Create(button, TW.Fast, {BackgroundColor3=Theme.Element}):Play()
     end)
 end
 
+local function clickPop(obj)
+    local base = obj.Size
+    obj.InputBegan:Connect(function(i)
+        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+            TweenService:Create(obj, TW.Fast, {Size=UDim2.new(base.X.Scale,base.X.Offset-4,base.Y.Scale,base.Y.Offset-3)}):Play()
+        end
+    end)
+    obj.InputEnded:Connect(function() TweenService:Create(obj, TW.Fast, {Size=base}):Play() end)
+    obj.MouseLeave:Connect(function() TweenService:Create(obj, TW.Fast, {Size=base}):Play() end)
+end
+
 ----------------------------------------------------------------------
--- NOTIFICATIONS
+-- 🎨 NOTIFICATIONS - izen.lol Style
 ----------------------------------------------------------------------
 local NotifyGui
 local function getNotifyContainer()
@@ -78,13 +99,13 @@ local function getNotifyContainer()
     if not NotifyGui.Parent then NotifyGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui") end
     local holder = create("Frame", {
         Name="Holder", BackgroundTransparency=1,
-        AnchorPoint=Vector2.new(1,1), Position=UDim2.new(1,-16,1,-16),
-        Size=UDim2.new(0,320,1,-32), Parent=NotifyGui,
+        AnchorPoint=Vector2.new(1,1), Position=UDim2.new(1,-20,1,-20),
+        Size=UDim2.new(0,320,1,-40), Parent=NotifyGui,
     })
     create("UIListLayout", {
         VerticalAlignment=Enum.VerticalAlignment.Bottom,
         HorizontalAlignment=Enum.HorizontalAlignment.Right,
-        SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,10), Parent=holder,
+        SortOrder=Enum.SortOrder.LayoutOrder, Padding=UDim.new(0,12), Parent=holder,
     })
     return NotifyGui
 end
@@ -96,6 +117,8 @@ local TYPE_COLORS = {
     Error   = Color3.fromRGB(255, 80, 90),
 }
 
+local TYPE_ICONS = { Success="✓", Info="ⓘ", Warning="⚠", Error="✕" }
+
 local function showNotify(opts)
     opts = opts or {}
     local title    = opts.Title or "Notification"
@@ -106,80 +129,90 @@ local function showNotify(opts)
     local holder = getNotifyContainer().Holder
     
     local card = create("Frame", {
-        Name="Notify", BackgroundColor3=Theme.BackgroundAlt, BackgroundTransparency=0,
+        Name="Notify", BackgroundColor3=Theme.Background, BackgroundTransparency=0,
         Size=UDim2.new(1,0,0,0), AutomaticSize=Enum.AutomaticSize.Y,
         ClipsDescendants=true, Parent=holder,
     })
     corner(card, 14)
-    stroke(card, Theme.Stroke, 1, 0)
+    stroke(card, accent, 1.5, 0.3)
+    gradient(card, Theme.Background, Color3.fromRGB(12, 12, 12), 90)
+    addGlow(card, 0.88)
     
     local inner = create("Frame", {
         BackgroundTransparency=1, Size=UDim2.new(1,0,0,0),
         AutomaticSize=Enum.AutomaticSize.Y, Parent=card,
     })
-    padding(inner, 14)
+    padding(inner, 16)
     
+    -- Badge with checkmark (izen.lol style)
     local badge = create("Frame", {
-        BackgroundColor3=Color3.fromRGB(14,22,18),
-        Size=UDim2.new(0,36,0,36), Parent=inner,
+        BackgroundColor3=Color3.fromRGB(0, 40, 20),
+        Size=UDim2.new(0,42,0,42), Parent=inner,
     })
-    corner(badge, 10)
-    stroke(badge, accent, 1, 0.5)
+    corner(badge, 12)
+    stroke(badge, accent, 1.5, 0)
     create("TextLabel", {
         BackgroundTransparency=1, Size=UDim2.new(1,0,1,0),
-        Text="✓", TextColor3=accent,
-        Font=Theme.FontBold, TextSize=20, Parent=badge,
+        Text=TYPE_ICONS[nType] or "✓", TextColor3=accent,
+        Font=Theme.FontBold, TextSize=22, Parent=badge,
     })
     
     create("TextLabel", {
-        BackgroundTransparency=1, Position=UDim2.new(0,48,0,2),
-        Size=UDim2.new(1,-56,0,20), Text=title, TextColor3=Theme.Text,
-        Font=Theme.FontBold, TextSize=15,
+        BackgroundTransparency=1, Position=UDim2.new(0,54,0,2),
+        Size=UDim2.new(1,-60,0,22), Text=title, TextColor3=Theme.Text,
+        Font=Theme.FontBold, TextSize=16,
         TextXAlignment=Enum.TextXAlignment.Left, Parent=inner,
     })
     create("TextLabel", {
-        BackgroundTransparency=1, Position=UDim2.new(0,48,0,22),
-        Size=UDim2.new(1,-56,0,0), AutomaticSize=Enum.AutomaticSize.Y,
+        BackgroundTransparency=1, Position=UDim2.new(0,54,0,24),
+        Size=UDim2.new(1,-60,0,0), AutomaticSize=Enum.AutomaticSize.Y,
         Text=content, TextColor3=Theme.TextDim, Font=Theme.Font, TextSize=13,
         TextWrapped=true, TextXAlignment=Enum.TextXAlignment.Left, Parent=inner,
     })
     
-    local closeBtn = create("TextButton", {
-        BackgroundColor3=Theme.Element, Size=UDim2.new(0,60,0,28),
-        Position=UDim2.new(1,-74,0,8),
-        Text="Close", TextColor3=Theme.TextDim, Font=Theme.Font, TextSize=12,
-        AutoButtonColor=false, Parent=inner,
+    -- Progress bar at bottom
+    local bar = create("Frame", {
+        BackgroundColor3=accent, BorderSizePixel=0,
+        Size=UDim2.new(1,0,0,3), Position=UDim2.new(0,0,1,-3), Parent=card,
     })
-    corner(closeBtn, 8)
-    stroke(closeBtn, Theme.Stroke, 1, 0)
-    ripple(closeBtn)
-    closeBtn.MouseButton1Click:Connect(function()
-        local out = TweenService:Create(card, TW.Normal, {Position=UDim2.new(1,30,0,0), BackgroundTransparency=1})
-        out:Play(); out.Completed:Connect(function() card:Destroy() end)
-    end)
+    corner(bar, 3)
     
-    card.Position = UDim2.new(1,20,0,0)
+    -- Animate in
+    card.Position = UDim2.new(1,30,0,0)
     card.BackgroundTransparency = 1
     TweenService:Create(card, TW.Slow, {Position=UDim2.new(0,0,0,0), BackgroundTransparency=0}):Play()
+    TweenService:Create(bar, TweenInfo.new(duration, Enum.EasingStyle.Linear), {Size=UDim2.new(0,0,0,3)}):Play()
     
     task.delay(duration, function()
         if card.Parent then
-            local out = TweenService:Create(card, TW.Normal, {Position=UDim2.new(1,30,0,0), BackgroundTransparency=1})
-            out:Play(); out.Completed:Connect(function() card:Destroy() end)
+            local out = TweenService:Create(card, TW.Slow, {Position=UDim2.new(1,30,0,0), BackgroundTransparency=1})
+            out:Play(); out.Completed:Wait(); card:Destroy()
         end
     end)
 end
+
+function Library:Notify(opts) showNotify(opts) end
 
 ----------------------------------------------------------------------
 -- WINDOW
 ----------------------------------------------------------------------
 function Library:CreateWindow(config)
     config = config or {}
-    local windowTitle = config.Title or "MoroLumina"
+    local windowTitle = config.Title or config.Name or "MoroLumina"
+    local subTitle    = config.SubTitle or "v1.0"
     local toggleKey   = config.ToggleKey or Enum.KeyCode.RightControl
     
     local Window = {}
     Window._toggles = {}
+    Window._flags = {}
+    
+    function Window:Notify(opts) showNotify(opts) end
+    
+    local function regFlag(cfg, api)
+        if cfg and cfg.Flag then Window._flags[cfg.Flag] = api end
+        return api
+    end
+    Window._regFlag = regFlag
     
     local screenGui = create("ScreenGui", {
         Name="MoroLumina", ResetOnSpawn=false, DisplayOrder=999,
@@ -191,115 +224,139 @@ function Library:CreateWindow(config)
     
     local root = create("CanvasGroup", {
         Name="Root", AnchorPoint=Vector2.new(0.5,0.5),
-        Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,600,0,400),
+        Position=UDim2.new(0.5,0,0.5,0), Size=UDim2.new(0,640,0,440),
         BackgroundTransparency=1, Parent=screenGui,
     })
-    addGlow(root)
+    addGlow(root, 0.82)
     
     local main = create("Frame", {
         Name="Main", BackgroundColor3=Theme.Background,
         Size=UDim2.new(1,0,1,0), Parent=root,
     })
     corner(main, 16)
-    stroke(main, Theme.Stroke, 1, 0)
+    stroke(main, Theme.Stroke, 1.5, 0)
+    gradient(main, Theme.Background, Theme.BackgroundAlt, 90)
     
     local topBar = create("Frame", {
         Name="TopBar", BackgroundColor3=Theme.BackgroundAlt,
-        Size=UDim2.new(1,0,0,50), Parent=main,
+        Size=UDim2.new(1,0,0,60), Parent=main,
     })
     corner(topBar, 16)
     create("Frame", {BackgroundColor3=Theme.BackgroundAlt, BorderSizePixel=0,
         Size=UDim2.new(1,0,0,16), Position=UDim2.new(0,0,1,-16), Parent=topBar})
     
-    create("TextLabel", {
-        BackgroundTransparency=1, Position=UDim2.new(0,20,0,12),
-        Size=UDim2.new(0,300,0,26), Text=windowTitle, TextColor3=Theme.Text,
-        Font=Theme.FontBold, TextSize=16, TextXAlignment=Enum.TextXAlignment.Left, Parent=topBar
+    -- Logo accent bar
+    local logo = create("Frame", {
+        BackgroundColor3=Theme.Accent, Size=UDim2.new(0,4,0,28),
+        Position=UDim2.new(0,20,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=topBar,
     })
+    corner(logo, 2)
     
-    -- Dragging
-    local dragging, dragStart, startPos
-    topBar.InputBegan:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-            dragging=true; dragStart=i.Position; startPos=root.Position
-            i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dragging=false end end)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
-            local d = i.Position - dragStart
-            root.Position = UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
-        end
-    end)
+    create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,36,0,12),
+        Size=UDim2.new(0,300,0,22), Text=windowTitle, TextColor3=Theme.Text,
+        Font=Theme.FontBold, TextSize=17, TextXAlignment=Enum.TextXAlignment.Left, Parent=topBar})
+    create("TextLabel", {BackgroundTransparency=1, Position=UDim2.new(0,36,0,34),
+        Size=UDim2.new(0,300,0,16), Text=subTitle, TextColor3=Theme.TextDim,
+        Font=Theme.Font, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left, Parent=topBar})
     
-    -- Sidebar
+    local closeBtn = create("TextButton", {
+        BackgroundColor3=Theme.Element, Size=UDim2.new(0,74,0,32),
+        Position=UDim2.new(1,-92,0.5,0), AnchorPoint=Vector2.new(0,0.5),
+        Text="Close", TextColor3=Theme.TextDim, Font=Theme.Font, TextSize=13,
+        AutoButtonColor=false, Parent=topBar,
+    })
+    corner(closeBtn, 10)
+    stroke(closeBtn, Theme.Stroke, 1, 0)
+    ripple(closeBtn)
+    
     local sidebar = create("Frame", {
         Name="Sidebar", BackgroundColor3=Theme.BackgroundAlt,
-        Position=UDim2.new(0,12,0,62), Size=UDim2.new(0,150,1,-74), Parent=main,
+        Position=UDim2.new(0,14,0,72), Size=UDim2.new(0,180,1,-86), Parent=main,
     })
-    corner(sidebar, 12)
-    stroke(sidebar, Theme.Stroke, 1, 0)
+    corner(sidebar, 14)
+    stroke(sidebar, Theme.Stroke, 1.2, 0)
     
     local tabList = create("ScrollingFrame", {
-        BackgroundTransparency=1, Position=UDim2.new(0,8,0,8),
-        Size=UDim2.new(1,-16,1,-16), ScrollBarThickness=0,
+        BackgroundTransparency=1, Position=UDim2.new(0,10,0,10),
+        Size=UDim2.new(1,-20,1,-20), ScrollBarThickness=0,
         CanvasSize=UDim2.new(0,0,0,0), AutomaticCanvasSize=Enum.AutomaticSize.Y, Parent=sidebar,
     })
-    create("UIListLayout", {Padding=UDim.new(0,6), SortOrder=Enum.SortOrder.LayoutOrder, Parent=tabList})
+    create("UIListLayout", {Padding=UDim.new(0,8), SortOrder=Enum.SortOrder.LayoutOrder, Parent=tabList})
     
-    -- Content
     local content = create("Frame", {
         Name="Content", BackgroundColor3=Theme.BackgroundAlt,
-        Position=UDim2.new(0,174,0,62), Size=UDim2.new(1,-186,1,-74), Parent=main,
+        Position=UDim2.new(0,206,0,72), Size=UDim2.new(1,-220,1,-86), Parent=main,
     })
-    corner(content, 12)
-    stroke(content, Theme.Stroke, 1, 0)
+    corner(content, 14)
+    stroke(content, Theme.Stroke, 1.2, 0)
     local pages = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Parent=content})
     
-    -- Visibility
+    do
+        local dragging, dragStart, startPos
+        topBar.InputBegan:Connect(function(i)
+            if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+                dragging=true; dragStart=i.Position; startPos=root.Position
+                i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dragging=false end end)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+                local d = i.Position - dragStart
+                root.Position = UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+            end
+        end)
+    end
+    
     local isVisible = true
+    local floatLogo
     local function setVisible(state)
         isVisible = state
         if state then
-            root.Visible=true; root.GroupTransparency=1; root.Size=UDim2.new(0,560,0,360)
-            TweenService:Create(root, TW.Normal, {GroupTransparency=0, Size=UDim2.new(0,600,0,400)}):Play()
+            root.Visible=true; root.GroupTransparency=1; root.Size=UDim2.new(0,600,0,400)
+            TweenService:Create(root, TW.Normal, {GroupTransparency=0, Size=UDim2.new(0,640,0,440)}):Play()
+            if floatLogo then TweenService:Create(floatLogo, TW.Fast, {Rotation=0}):Play() end
         else
-            local t=TweenService:Create(root, TW.Normal, {GroupTransparency=1, Size=UDim2.new(0,560,0,360)})
+            local t=TweenService:Create(root, TW.Normal, {GroupTransparency=1, Size=UDim2.new(0,600,0,400)})
             t:Play(); t.Completed:Connect(function() if not isVisible then root.Visible=false end end)
+            if floatLogo then TweenService:Create(floatLogo, TW.Fast, {Rotation=90}):Play() end
         end
     end
     Window.SetVisible = function(_, s) setVisible(s) end
-    function Window:Notify(opts) showNotify(opts) end
     
-    -- Float Button
     local floatBtn = create("TextButton", {
         Name="FloatToggle", BackgroundColor3=Theme.Background,
-        Size=UDim2.new(0,48,0,48), Position=UDim2.new(0,20,0,20),
+        Size=UDim2.new(0,56,0,56), Position=UDim2.new(0,20,0,20),
         Text="", AutoButtonColor=false, Parent=screenGui,
     })
-    corner(floatBtn, 24)
+    corner(floatBtn, 28)
     stroke(floatBtn, Theme.StrokeAccent, 1.5, 0)
-    addGlow(floatBtn).ImageTransparency = 0.85
-    create("TextLabel", {
+    addGlow(floatBtn, 0.8)
+    floatLogo = create("TextLabel", {
         BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="M",
-        TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=22, Parent=floatBtn,
+        TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=26, Parent=floatBtn,
     })
+    floatBtn.MouseEnter:Connect(function() TweenService:Create(floatBtn, TW.Fast, {Size=UDim2.new(0,62,0,62)}):Play() end)
+    floatBtn.MouseLeave:Connect(function() TweenService:Create(floatBtn, TW.Fast, {Size=UDim2.new(0,56,0,56)}):Play() end)
     
-    local floatDragging, floatDragStart, floatStartPos, floatMoved
-    floatBtn.InputBegan:Connect(function(i)
-        if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
-            floatDragging=true; floatMoved=false; floatDragStart=i.Position; floatStartPos=floatBtn.Position
-            i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then floatDragging=false end end)
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
-        if floatDragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
-            local d=i.Position-floatDragStart
-            if d.Magnitude>5 then floatMoved=true end
-            floatBtn.Position=UDim2.new(floatStartPos.X.Scale,floatStartPos.X.Offset+d.X,floatStartPos.Y.Scale,floatStartPos.Y.Offset+d.Y)
-        end
-    end)
-    floatBtn.MouseButton1Click:Connect(function() if not floatMoved then setVisible(not isVisible) end end)
+    do
+        local dragging, dragStart, startPos, moved
+        floatBtn.InputBegan:Connect(function(i)
+            if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then
+                dragging=true; moved=false; dragStart=i.Position; startPos=floatBtn.Position
+                i.Changed:Connect(function() if i.UserInputState==Enum.UserInputState.End then dragging=false end end)
+            end
+        end)
+        UserInputService.InputChanged:Connect(function(i)
+            if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then
+                local d=i.Position-dragStart
+                if d.Magnitude>5 then moved=true end
+                floatBtn.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+d.X,startPos.Y.Scale,startPos.Y.Offset+d.Y)
+            end
+        end)
+        floatBtn.MouseButton1Click:Connect(function() if not moved then setVisible(not isVisible) end end)
+    end
+    
+    closeBtn.MouseButton1Click:Connect(function() setVisible(false) end)
     
     UserInputService.InputBegan:Connect(function(i, gpe)
         if gpe then return end
@@ -309,13 +366,13 @@ function Library:CreateWindow(config)
     local tabs = {}
     local activeTab
     
-    function Window:CreateTab(name)
+    function Window:CreateTab(name, icon)
         local Tab = {}
         local tabBtn = create("TextButton", {
             BackgroundColor3=Theme.Element, BackgroundTransparency=1,
-            Size=UDim2.new(1,0,0,34), Text="", AutoButtonColor=false, Parent=tabList,
+            Size=UDim2.new(1,0,0,40), Text="", AutoButtonColor=false, Parent=tabList,
         })
-        corner(tabBtn, 8)
+        corner(tabBtn, 10)
         local tabStroke = stroke(tabBtn, Theme.Stroke, 1, 1)
         local indicator = create("Frame", {
             BackgroundColor3=Theme.Accent, Size=UDim2.new(0,3,0,0),
@@ -323,19 +380,19 @@ function Library:CreateWindow(config)
         })
         corner(indicator, 2)
         local tabLabel = create("TextLabel", {
-            BackgroundTransparency=1, Position=UDim2.new(0,14,0,0),
-            Size=UDim2.new(1,-20,1,0), Text=name, TextColor3=Theme.TextDim,
+            BackgroundTransparency=1, Position=UDim2.new(0,16,0,0),
+            Size=UDim2.new(1,-24,1,0), Text=name, TextColor3=Theme.TextDim,
             Font=Theme.Font, TextSize=13, TextXAlignment=Enum.TextXAlignment.Left, Parent=tabBtn,
         })
         
         local page = create("ScrollingFrame", {
             BackgroundTransparency=1, Size=UDim2.new(1,0,1,0),
-            ScrollBarThickness=3, ScrollBarImageColor3=Theme.Accent, ScrollBarImageTransparency=0.5,
+            ScrollBarThickness=4, ScrollBarImageColor3=Theme.Accent, ScrollBarImageTransparency=0.4,
             CanvasSize=UDim2.new(0,0,0,0), AutomaticCanvasSize=Enum.AutomaticSize.Y,
             Visible=false, Parent=pages,
         })
-        padding(page, 12)
-        create("UIListLayout", {Padding=UDim.new(0,8), SortOrder=Enum.SortOrder.LayoutOrder, Parent=page})
+        padding(page, 14)
+        create("UIListLayout", {Padding=UDim.new(0,10), SortOrder=Enum.SortOrder.LayoutOrder, Parent=page})
         
         local function select()
             if activeTab==Tab then return end
@@ -348,12 +405,16 @@ function Library:CreateWindow(config)
             end
             activeTab=Tab; page.Visible=true; page.Position=UDim2.new(0,0,0,10)
             TweenService:Create(page, TW.Normal, {Position=UDim2.new(0,0,0,0)}):Play()
-            TweenService:Create(tabBtn, TW.Fast, {BackgroundTransparency=0.8}):Play()
-            TweenService:Create(tabStroke, TW.Fast, {Transparency=0.5, Color=Theme.StrokeAccent}):Play()
+            TweenService:Create(tabBtn, TW.Fast, {BackgroundTransparency=0.7}):Play()
+            TweenService:Create(tabStroke, TW.Fast, {Transparency=0.3, Color=Theme.StrokeAccent}):Play()
             TweenService:Create(tabLabel, TW.Fast, {TextColor3=Theme.Text}):Play()
-            TweenService:Create(indicator, TW.Normal, {Size=UDim2.new(0,3,0,18)}):Play()
+            TweenService:Create(indicator, TW.Bounce, {Size=UDim2.new(0,3,0,22)}):Play()
         end
+        
         tabBtn.MouseButton1Click:Connect(select)
+        tabBtn.MouseEnter:Connect(function() if activeTab~=Tab then TweenService:Create(tabBtn,TW.Fast,{BackgroundTransparency=0.85}):Play() end end)
+        tabBtn.MouseLeave:Connect(function() if activeTab~=Tab then TweenService:Create(tabBtn,TW.Fast,{BackgroundTransparency=1}):Play() end end)
+        
         Tab.Btn=tabBtn; Tab.Stroke=tabStroke; Tab.Label=tabLabel; Tab.Indicator=indicator; Tab.Page=page
         table.insert(tabs, Tab)
         if #tabs==1 then select() end
@@ -364,278 +425,721 @@ function Library:CreateWindow(config)
             return el, stroke(el, Theme.Stroke, 1, 0)
         end
         
-        function Tab:AddSection(text)
-            local h = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,24), Parent=page})
+        -- ALL YOUR ORIGINAL FUNCTIONS PRESERVED BELOW
+        function Tab:CreateSection(text)
+            local h = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,28), Parent=page})
             create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Position=UDim2.new(0,4,0,0),
-                Text=string.upper(text), TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=11,
+                Text=string.upper(text), TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=12,
                 TextXAlignment=Enum.TextXAlignment.Left, Parent=h})
             return h
         end
         
-        function Tab:AddLabel(text)
-            local el = baseElement(36)
+        function Tab:CreateLabel(text)
+            local el = baseElement(38)
             local lbl = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-24,1,0),
                 Position=UDim2.new(0,12,0,0), Text=text, TextColor3=Theme.TextDim, Font=Theme.Font,
                 TextSize=13, TextXAlignment=Enum.TextXAlignment.Left, TextWrapped=true, Parent=el})
             return {SetText=function(_,t) lbl.Text=t end, Instance=el}
         end
         
-        function Tab:AddParagraph(title, text)
-            local el = baseElement(60)
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-24,0,20),
-                Position=UDim2.new(0,12,0,8), Text=title, TextColor3=Theme.Text, Font=Theme.FontBold,
-                TextSize=14, TextXAlignment=Enum.TextXAlignment.Left, Parent=el})
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-24,0,32),
-                Position=UDim2.new(0,12,0,26), Text=text, TextColor3=Theme.TextDim, Font=Theme.Font,
-                TextSize=12, TextWrapped=true, TextXAlignment=Enum.TextXAlignment.Left, Parent=el})
-            return {Instance=el}
+        local function attachKeybind(parent, xOffset, onTrigger, defaultKey)
+            local currentKey = defaultKey
+            local binding = false
+            local box = create("TextButton", {
+                BackgroundColor3 = Theme.Section,
+                Size = UDim2.new(0, 40, 0, 24),
+                Position = UDim2.new(1, -(xOffset + 40), 0.5, 0),
+                AnchorPoint = Vector2.new(0, 0.5),
+                Text = currentKey and currentKey.Name or "...",
+                TextColor3 = currentKey and Theme.Accent or Theme.TextDim,
+                Font = Theme.Font, TextSize = 11, AutoButtonColor = false, Parent = parent,
+            })
+            corner(box, 6)
+            local bStroke = stroke(box, Theme.Stroke, 1, 0.4)
+            local function fit()
+                local txt = currentKey and currentKey.Name or "..."
+                box.Text = txt
+                local w = math.max(40, #txt * 7 + 14)
+                box.Size = UDim2.new(0, w, 0, 24)
+                box.Position = UDim2.new(1, -(xOffset + w), 0.5, 0)
+                box.TextColor3 = currentKey and Theme.Accent or Theme.TextDim
+            end
+            fit()
+            box.MouseButton1Click:Connect(function()
+                if binding then return end
+                binding = true
+                box.Text = "..."
+                box.TextColor3 = Theme.Accent
+                TweenService:Create(bStroke, TW.Fast, { Color = Theme.StrokeAccent, Transparency = 0 }):Play()
+                local conn
+                conn = UserInputService.InputBegan:Connect(function(input, gp)
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        if input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete then
+                            currentKey = nil
+                        elseif input.KeyCode == Enum.KeyCode.Escape then
+                        else
+                            currentKey = input.KeyCode
+                        end
+                        binding = false
+                        fit()
+                        TweenService:Create(bStroke, TW.Fast, { Color = Theme.Stroke, Transparency = 0.4 }):Play()
+                        conn:Disconnect()
+                    end
+                end)
+            end)
+            UserInputService.InputBegan:Connect(function(input, gp)
+                if gp or binding then return end
+                if currentKey and input.KeyCode == currentKey then
+                    if onTrigger then task.spawn(onTrigger) end
+                end
+            end)
+            return {
+                Get = function() return currentKey end,
+                Set = function(k) currentKey = k; fit() end,
+            }
         end
         
-        function Tab:AddButton(cfg)
-            local text, callback = cfg, function() end
-            if type(cfg) == "table" then text = cfg.Text; callback = cfg.Callback or function() end end
-            local el = baseElement(40)
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-24,1,0),
-                Position=UDim2.new(0,12,0,0), Text=text, TextColor3=Theme.Text, Font=Theme.Font,
-                TextSize=13, TextXAlignment=Enum.TextXAlignment.Left, Parent=el})
-            local btn = create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0),
-                Text="", AutoButtonColor=false, Parent=el})
-            btn.MouseButton1Click:Connect(function() if callback then task.spawn(callback) end end)
-            ripple(el)
-            return {Instance=el}
-        end
-        
-        function Tab:AddToggle(cfg)
-            local text, default, callback = cfg, false, function() end
-            if type(cfg) == "table" then text = cfg.Text; default = cfg.Default; callback = cfg.Callback or function() end end
-            local state = default or false
+        function Tab:CreateButton(cfg)
+            cfg = cfg or {}
             local el = baseElement(42)
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-100,1,0),
-                Position=UDim2.new(0,12,0,0), Text=text, TextColor3=Theme.Text, Font=Theme.Font,
-                TextSize=13, TextXAlignment=Enum.TextXAlignment.Left, Parent=el})
-            local track = create("Frame", {BackgroundColor3=state and Theme.Accent or Theme.Element,
-                Size=UDim2.new(0,38,0,20), Position=UDim2.new(1,-48,0.5,0),
-                AnchorPoint=Vector2.new(0,0.5), Parent=el})
-            corner(track, 10)
-            local knob = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255),
-                Size=UDim2.new(0,14,0,14), Position=state and UDim2.new(1,-17,0.5,0) or UDim2.new(0,3,0.5,0),
-                AnchorPoint=Vector2.new(0,0.5), Parent=track})
-            corner(knob, 7)
-            
+            create("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, cfg.Keybind and -74 or -24, 1, 0),
+                Position = UDim2.new(0, 12, 0, 0),
+                Text = cfg.Name or "Button",
+                TextColor3 = Theme.Text, Font = Theme.Font, TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left, Parent = el,
+            })
+            local function fire()
+                if cfg.Callback then task.spawn(cfg.Callback) end
+            end
+            local kb
+            if cfg.Keybind then
+                kb = attachKeybind(el, 12, fire, cfg.DefaultKey)
+            end
+            local btn = create("TextButton", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, cfg.Keybind and -64 or 0, 1, 0),
+                Text = "", AutoButtonColor = false, Parent = el,
+            })
+            btn.MouseButton1Click:Connect(fire)
+            ripple(el)
+            return regFlag(cfg, {
+                Fire = fire,
+                SetKey = function(_, k) if kb then kb.Set(k) end end,
+                GetKey = function() return kb and kb.Get() end,
+                Instance = el,
+            })
+        end
+        
+        function Tab:CreateToggle(cfg)
+            cfg = cfg or {}
+            local state = cfg.Default or false
+            local el = baseElement(44)
+            create("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -114, 1, 0),
+                Position = UDim2.new(0, 12, 0, 0),
+                Text = cfg.Name or "Toggle",
+                TextColor3 = Theme.Text, Font = Theme.Font, TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left, Parent = el,
+            })
+            local track = create("Frame", {
+                BackgroundColor3 = state and Theme.Accent or Theme.ToggleOff,
+                Size = UDim2.new(0, 42, 0, 24),
+                Position = UDim2.new(1, -56, 0.5, 0),
+                AnchorPoint = Vector2.new(0, 0.5), Parent = el,
+            })
+            corner(track, 12)
+            local knob = create("Frame", {
+                BackgroundColor3 = Color3.fromRGB(255,255,255),
+                Size = UDim2.new(0, 18, 0, 18),
+                Position = state and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+                AnchorPoint = Vector2.new(0, 0.5), Parent = track,
+            })
+            corner(knob, 9)
             local function update()
-                TweenService:Create(track, TW.Fast, {BackgroundColor3=state and Theme.Accent or Theme.Element}):Play()
-                TweenService:Create(knob, TW.Normal, {Position=state and UDim2.new(1,-17,0.5,0) or UDim2.new(0,3,0.5,0)}):Play()
+                TweenService:Create(track, TW.Fast, {
+                    BackgroundColor3 = state and Theme.Accent or Theme.ToggleOff
+                }):Play()
+                TweenService:Create(knob, TW.Normal, {
+                    Position = state and UDim2.new(1, -21, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
+                }):Play()
             end
             local function toggle()
-                state = not state; update()
-                if callback then task.spawn(callback, state) end
+                state = not state
+                update()
+                if cfg.Callback then task.spawn(cfg.Callback, state) end
             end
-            local btn = create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0),
-                Text="", AutoButtonColor=false, Parent=el})
+            local kb
+            if cfg.Keybind then
+                kb = attachKeybind(el, 66, toggle, cfg.DefaultKey)
+            end
+            local btn = create("TextButton", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, cfg.Keybind and -114 or 0, 1, 0),
+                Text = "", AutoButtonColor = false, Parent = el,
+            })
             btn.MouseButton1Click:Connect(toggle)
             ripple(el)
-            local api = {Set=function(_,v) state=v; update(); if callback then task.spawn(callback, state) end end, Get=function() return state end, Instance=el}
+            local api = regFlag(cfg, {
+                Set = function(_, v) state = v; update(); if cfg.Callback then task.spawn(cfg.Callback, state) end end,
+                Get = function() return state end,
+                SetKey = function(_, k) if kb then kb.Set(k) end end,
+                GetKey = function() return kb and kb.Get() end,
+                Instance = el,
+            })
             table.insert(Window._toggles, api)
             return api
         end
         
-        function Tab:AddSlider(cfg)
-            local text, min, max, default, callback = cfg, 0, 100, 0, function() end
-            if type(cfg) == "table" then text = cfg.Text; min = cfg.Min; max = cfg.Max; default = cfg.Default; callback = cfg.Callback or function() end end
-            local value = math.clamp(default or min, min, max)
-            local el = baseElement(54)
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-60,0,20), Position=UDim2.new(0,12,0,6),
-                Text=text, TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
+        function Tab:CreateSlider(cfg)
+            cfg=cfg or {}; local min=cfg.Min or 0; local max=cfg.Max or 100
+            local default=math.clamp(cfg.Default or min,min,max); local decimals=cfg.Decimals or 0
+            local suffix=cfg.Suffix or ""; local value=default; local el=baseElement(58)
+            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-74,0,22), Position=UDim2.new(0,12,0,6),
+                Text=cfg.Name or "Slider", TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
                 TextXAlignment=Enum.TextXAlignment.Left, Parent=el})
-            local valLabel = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0,50,0,20), Position=UDim2.new(1,-58,0,6),
-                Text=tostring(value), TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=12,
+            local valLabel=create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0,64,0,22), Position=UDim2.new(1,-72,0,6),
+                Text=tostring(default)..suffix, TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=13,
                 TextXAlignment=Enum.TextXAlignment.Right, Parent=el})
-            local barBack = create("Frame", {BackgroundColor3=Theme.Element, Size=UDim2.new(1,-24,0,6), Position=UDim2.new(0,12,1,-14), Parent=el})
-            corner(barBack, 3)
-            local fill = create("Frame", {BackgroundColor3=Theme.Accent, Size=UDim2.new((value-min)/(max-min),0,1,0), Parent=barBack})
-            corner(fill, 3)
-            local knob = create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), Size=UDim2.new(0,12,0,12),
-                Position=UDim2.new((value-min)/(max-min),0,0.5,0), AnchorPoint=Vector2.new(0.5,0.5), Parent=barBack})
-            corner(knob, 6)
-            
-            local dragging = false
+            local barBack=create("Frame", {BackgroundColor3=Theme.ToggleOff, Size=UDim2.new(1,-24,0,7), Position=UDim2.new(0,12,1,-18), Parent=el})
+            corner(barBack,4)
+            local fill=create("Frame", {BackgroundColor3=Theme.Accent, Size=UDim2.new((default-min)/(max-min),0,1,0), Parent=barBack})
+            corner(fill,4)
+            local knob=create("Frame", {BackgroundColor3=Color3.fromRGB(255,255,255), Size=UDim2.new(0,14,0,14),
+                Position=UDim2.new((default-min)/(max-min),0,0.5,0), AnchorPoint=Vector2.new(0.5,0.5), Parent=barBack})
+            corner(knob,7)
+            local dragging=false
+            local function round(n) local m=10^decimals return math.floor(n*m+0.5)/m end
             local function update(x)
-                local rel = math.clamp((x-barBack.AbsolutePosition.X)/barBack.AbsoluteSize.X, 0, 1)
-                value = math.floor(min + (max-min)*rel)
-                local pct = (value-min)/(max-min)
-                TweenService:Create(fill, TW.Fast, {Size=UDim2.new(pct,0,1,0)}):Play()
-                TweenService:Create(knob, TW.Fast, {Position=UDim2.new(pct,0,0.5,0)}):Play()
-                valLabel.Text = tostring(value)
-                if callback then task.spawn(callback, value) end
+                local rel=math.clamp((x-barBack.AbsolutePosition.X)/barBack.AbsoluteSize.X,0,1)
+                value=round(min+(max-min)*rel); local pct=(value-min)/(max-min)
+                TweenService:Create(fill,TW.Fast,{Size=UDim2.new(pct,0,1,0)}):Play()
+                TweenService:Create(knob,TW.Fast,{Position=UDim2.new(pct,0,0.5,0)}):Play()
+                valLabel.Text=tostring(value)..suffix
+                if cfg.Callback then task.spawn(cfg.Callback,value) end
             end
             barBack.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=true; update(i.Position.X) end end)
             UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=false end end)
             UserInputService.InputChanged:Connect(function(i) if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then update(i.Position.X) end end)
             ripple(el)
-            return {Set=function(_,v) value=math.clamp(v,min,max); local pct=(value-min)/(max-min); fill.Size=UDim2.new(pct,0,1,0); knob.Position=UDim2.new(pct,0,0.5,0); valLabel.Text=tostring(value); if callback then task.spawn(callback,value) end end, Get=function() return value end, Instance=el}
+            return regFlag(cfg, {Set=function(_,v)
+                value=math.clamp(v,min,max); local pct=(value-min)/(max-min)
+                fill.Size=UDim2.new(pct,0,1,0); knob.Position=UDim2.new(pct,0,0.5,0)
+                valLabel.Text=tostring(value)..suffix
+                if cfg.Callback then task.spawn(cfg.Callback,value) end
+            end, Get=function() return value end, Instance=el})
         end
         
-        function Tab:AddDropdown(cfg)
-            local text, list, default, callback = cfg, {}, nil, function() end
-            if type(cfg) == "table" then text = cfg.Text; list = cfg.List; default = cfg.Default; callback = cfg.Callback or function() end end
-            local selected = default or "Select..."
-            local open = false
-            local el = baseElement(42); el.ClipsDescendants = true
-            local header = create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,42), Text="", AutoButtonColor=false, Parent=el})
+        function Tab:CreateSliderInput(cfg)
+            cfg = cfg or {}
+            local min      = cfg.Min or 0
+            local max      = cfg.Max or 100
+            local decimals = cfg.Decimals or 0
+            local value    = math.clamp(cfg.Default or min, min, max)
+            local suffix   = cfg.Suffix or ""
+            local el = baseElement(68)
+            local function round(v)
+                local m = 10 ^ decimals
+                return math.floor(v * m + 0.5) / m
+            end
+            create("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, -94, 0, 22),
+                Position = UDim2.new(0, 12, 0, 6),
+                Text = cfg.Name or "Slider",
+                TextColor3 = Theme.Text, Font = Theme.Font, TextSize = 13,
+                TextXAlignment = Enum.TextXAlignment.Left, Parent = el,
+            })
+            local inputBox = create("TextBox", {
+                BackgroundColor3 = Theme.Section,
+                Size = UDim2.new(0, 74, 0, 26),
+                Position = UDim2.new(1, -86, 0, 5),
+                Text = tostring(round(value)) .. suffix,
+                TextColor3 = Theme.Accent,
+                Font = Theme.Font, TextSize = 12,
+                ClearTextOnFocus = false, Parent = el,
+            })
+            corner(inputBox, 6)
+            local inStroke = stroke(inputBox, Theme.Stroke, 1, 0.4)
+            local track = create("Frame", {
+                BackgroundColor3 = Theme.ToggleOff,
+                Size = UDim2.new(1, -24, 0, 7),
+                Position = UDim2.new(0, 12, 1, -18), Parent = el,
+            })
+            corner(track, 4)
+            local fill = create("Frame", {
+                BackgroundColor3 = Theme.Accent,
+                Size = UDim2.new((value - min) / (max - min), 0, 1, 0), Parent = track,
+            })
+            corner(fill, 4)
+            local knob = create("Frame", {
+                BackgroundColor3 = Color3.fromRGB(255,255,255),
+                Size = UDim2.new(0, 14, 0, 14),
+                Position = UDim2.new((value - min) / (max - min), -7, 0.5, 0),
+                AnchorPoint = Vector2.new(0, 0.5), Parent = track,
+            })
+            corner(knob, 7)
+            local function updateVisual(animate)
+                local pct = (value - min) / (max - min)
+                local tw = animate and TW.Fast or TweenInfo.new(0)
+                TweenService:Create(fill, tw, { Size = UDim2.new(pct, 0, 1, 0) }):Play()
+                TweenService:Create(knob, tw, { Position = UDim2.new(pct, -7, 0.5, 0) }):Play()
+            end
+            local function setValue(v, fromInput, animate)
+                value = math.clamp(round(v), min, max)
+                updateVisual(animate)
+                if not fromInput then
+                    inputBox.Text = tostring(value) .. suffix
+                end
+                if cfg.Callback then task.spawn(cfg.Callback, value) end
+            end
+            local dragging = false
+            local function setFromX(x)
+                local rel = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+                setValue(min + rel * (max - min), false, false)
+            end
+            track.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.Touch then
+                    dragging = true; setFromX(input.Position.X)
+                end
+            end)
+            knob.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.Touch then dragging = true end
+            end)
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+                or input.UserInputType == Enum.UserInputType.Touch) then setFromX(input.Position.X) end
+            end)
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1
+                or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+            end)
+            inputBox.Focused:Connect(function()
+                TweenService:Create(inStroke, TW.Fast, { Color = Theme.StrokeAccent, Transparency = 0 }):Play()
+            end)
+            inputBox.FocusLost:Connect(function()
+                TweenService:Create(inStroke, TW.Fast, { Color = Theme.Stroke, Transparency = 0.4 }):Play()
+                local num = tonumber(inputBox.Text:gsub("[^%-%d%.]", ""))
+                if num then
+                    setValue(num, true, true)
+                    inputBox.Text = tostring(value) .. suffix
+                else
+                    inputBox.Text = tostring(value) .. suffix
+                end
+            end)
+            updateVisual(false)
+            return regFlag(cfg, {
+                Set = function(_, v) setValue(v, false, true) end,
+                Get = function() return value end,
+                Instance = el,
+            })
+        end
+        
+        function Tab:CreateDropdown(cfg)
+            cfg=cfg or {}; local options=cfg.Options or {}; local multi=cfg.Multi or false
+            local selected=multi and {} or (cfg.Default or "Select..."); local open=false
+            local el=baseElement(44); el.ClipsDescendants=true
+            local header=create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,44), Text="", AutoButtonColor=false, Parent=el})
             create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0.5,0,1,0), Position=UDim2.new(0,12,0,0),
-                Text=text, TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
+                Text=cfg.Name or "Dropdown", TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
                 TextXAlignment=Enum.TextXAlignment.Left, Parent=header})
-            local valueLbl = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0.5,-40,1,0), Position=UDim2.new(0.5,0,0,0),
-                Text=tostring(selected), TextColor3=Theme.TextDim, Font=Theme.Font,
+            local valueLbl=create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0.5,-44,1,0), Position=UDim2.new(0.5,0,0,0),
+                Text=type(selected)=="table" and "None" or tostring(selected), TextColor3=Theme.TextDim, Font=Theme.Font,
                 TextSize=13, TextXAlignment=Enum.TextXAlignment.Right, TextTruncate=Enum.TextTruncate.AtEnd, Parent=header})
-            local arrow = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0,24,1,0), Position=UDim2.new(1,-30,0,0),
-                Text="v", TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=14, Rotation=90, Parent=header})
-            local listHolder = create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,-16,0,0), Position=UDim2.new(0,8,0,44),
+            local arrow = create("TextLabel", {BackgroundTransparency = 1, Size = UDim2.new(0, 26, 1, 0), Position = UDim2.new(1, -32, 0, 0),
+                Text = "v", TextColor3 = Theme.Accent, Font = Theme.FontBold, TextSize = 14, Rotation = 90, Parent = header})
+            local listHolder=create("Frame", {BackgroundTransparency=1, Size=UDim2.new(1,-16,0,0), Position=UDim2.new(0,8,0,46),
                 AutomaticSize=Enum.AutomaticSize.Y, Parent=el})
             create("UIListLayout", {Padding=UDim.new(0,4), SortOrder=Enum.SortOrder.LayoutOrder, Parent=listHolder})
-            
+            local function refreshText()
+                if multi then
+                    local picks={} for k,v in pairs(selected) do if v then table.insert(picks,k) end end
+                    valueLbl.Text=#picks>0 and table.concat(picks,", ") or "None"
+                else valueLbl.Text=tostring(selected) end
+            end
             local optButtons = {}
             local function buildOptions()
                 for _, b in ipairs(optButtons) do b.Btn:Destroy() end
                 table.clear(optButtons)
-                for _, opt in ipairs(list) do
-                    local oBtn = create("TextButton", {BackgroundColor3=Theme.Element, Size=UDim2.new(1,0,0,30), Text="", AutoButtonColor=false, Parent=listHolder})
+                for _, opt in ipairs(options) do
+                    local oBtn = create("TextButton", {
+                        BackgroundColor3 = Theme.Section,
+                        Size = UDim2.new(1, 0, 0, 32), Text = "",
+                        AutoButtonColor = false, Parent = listHolder,
+                    })
                     corner(oBtn, 8)
                     local oStroke = stroke(oBtn, Theme.Stroke, 1, 0.5)
-                    local oLbl = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-16,1,0), Position=UDim2.new(0,10,0,0),
-                        Text=tostring(opt), TextColor3=Theme.TextDim, Font=Theme.Font, TextSize=12,
-                        TextXAlignment=Enum.TextXAlignment.Left, Parent=oBtn})
+                    local oLbl = create("TextLabel", {
+                        BackgroundTransparency = 1, Size = UDim2.new(1, -16, 1, 0),
+                        Position = UDim2.new(0, 10, 0, 0), Text = tostring(opt),
+                        TextColor3 = Theme.TextDim, Font = Theme.Font, TextSize = 12,
+                        TextXAlignment = Enum.TextXAlignment.Left, Parent = oBtn,
+                    })
                     local function highlight()
-                        local on = (selected == opt)
-                        TweenService:Create(oStroke, TW.Fast, {Color=on and Theme.StrokeAccent or Theme.Stroke, Transparency=on and 0.2 or 0.5}):Play()
-                        TweenService:Create(oLbl, TW.Fast, {TextColor3=on and Theme.Accent or Theme.TextDim}):Play()
+                        local on = multi and selected[opt] or (selected == opt)
+                        TweenService:Create(oStroke, TW.Fast, {
+                            Color = on and Theme.StrokeAccent or Theme.Stroke,
+                            Transparency = on and 0.2 or 0.5,
+                        }):Play()
+                        TweenService:Create(oLbl, TW.Fast, {
+                            TextColor3 = on and Theme.Accent or Theme.TextDim
+                        }):Play()
                     end
                     highlight()
                     oBtn.MouseButton1Click:Connect(function()
-                        selected = opt; valueLbl.Text = tostring(selected)
+                        if multi then selected[opt] = not selected[opt]
+                        else selected = opt end
+                        refreshText()
                         for _, b in ipairs(optButtons) do b.Refresh() end
-                        if callback then task.spawn(callback, selected) end
-                        open = false
-                        TweenService:Create(el, TW.Normal, {Size=UDim2.new(1,0,0,42)}):Play()
-                        TweenService:Create(arrow, TW.Fast, {Rotation=0}):Play()
+                        if cfg.Callback then task.spawn(cfg.Callback, selected) end
+                        if not multi then
+                            open = false
+                            TweenService:Create(el, TW.Normal, { Size = UDim2.new(1, 0, 0, 44) }):Play()
+                            TweenService:Create(arrow, TW.Fast, { Rotation = 0 }):Play()
+                        end
                     end)
-                    table.insert(optButtons, {Btn=oBtn, Refresh=highlight})
+                    table.insert(optButtons, { Btn = oBtn, Refresh = highlight })
                 end
             end
             buildOptions()
             header.MouseButton1Click:Connect(function()
-                open = not open
-                local target = open and (52 + #list * 34) or 42
-                TweenService:Create(el, TW.Normal, {Size=UDim2.new(1,0,0,target)}):Play()
-                TweenService:Create(arrow, TW.Fast, {Rotation=open and 180 or 0}):Play()
+                open=not open
+                local target=open and (54+#options*36) or 44
+                TweenService:Create(el,TW.Normal,{Size=UDim2.new(1,0,0,target)}):Play()
+                TweenService:Create(arrow,TW.Fast,{Rotation=open and 180 or 0}):Play()
             end)
             ripple(el)
-            return {Set=function(_,v) selected=v; valueLbl.Text=tostring(v); for _, b in ipairs(optButtons) do b.Refresh() end end, Get=function() return selected end, Refresh=function(_,newList) list=newList or {}; buildOptions() end, Instance=el}
+            return regFlag(cfg, {
+                Set = function(_, v) selected = v; refreshText(); for _, b in ipairs(optButtons) do b.Refresh() end end,
+                Get = function() return selected end,
+                Refresh = function(_, newOpts) options = newOpts or {}; buildOptions(); refreshText() end,
+                Instance = el,
+            })
         end
         
-        function Tab:AddTextBox(cfg)
-            local text, placeholder, clearOnFocus, callback = cfg, "", false, function() end
-            if type(cfg) == "table" then text = cfg.Text; placeholder = cfg.Placeholder; clearOnFocus = cfg.ClearOnFocus; callback = cfg.Callback or function() end end
-            local el = baseElement(42)
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0.4,0,1,0), Position=UDim2.new(0,12,0,0),
-                Text=text, TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
+        function Tab:CreateTextbox(cfg)
+            cfg=cfg or {}; local el=baseElement(44)
+            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0.45,0,1,0), Position=UDim2.new(0,12,0,0),
+                Text=cfg.Name or "Input", TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
                 TextXAlignment=Enum.TextXAlignment.Left, Parent=el})
-            local box = create("Frame", {BackgroundColor3=Theme.Element, Size=UDim2.new(0.55,-20,0,28),
-                Position=UDim2.new(0.45,0,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=el})
-            corner(box, 8); local bStroke = stroke(box, Theme.Stroke, 1, 0)
-            local input = create("TextBox", {BackgroundTransparency=1, Size=UDim2.new(1,-16,1,0), Position=UDim2.new(0,8,0,0),
-                Text="", PlaceholderText=placeholder or "Type...", PlaceholderColor3=Theme.TextDim,
+            local box=create("Frame", {BackgroundColor3=Theme.Section, Size=UDim2.new(0.5,-20,0,30),
+                Position=UDim2.new(0.5,0,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=el})
+            corner(box,8); local bStroke=stroke(box,Theme.Stroke,1,0)
+            local input=create("TextBox", {BackgroundTransparency=1, Size=UDim2.new(1,-16,1,0), Position=UDim2.new(0,8,0,0),
+                Text=cfg.Default or "", PlaceholderText=cfg.Placeholder or "Type...", PlaceholderColor3=Theme.TextDim,
                 TextColor3=Theme.Text, Font=Theme.Font, TextSize=12, TextXAlignment=Enum.TextXAlignment.Left,
-                ClearTextOnFocus=clearOnFocus or false, Parent=box})
-            input.Focused:Connect(function() TweenService:Create(bStroke, TW.Fast, {Color=Theme.StrokeAccent, Transparency=0.2}):Play() end)
+                ClearTextOnFocus=false, Parent=box})
+            input.Focused:Connect(function() TweenService:Create(bStroke,TW.Fast,{Color=Theme.StrokeAccent,Transparency=0.2}):Play() end)
             input.FocusLost:Connect(function(enter)
-                TweenService:Create(bStroke, TW.Fast, {Color=Theme.Stroke, Transparency=0}):Play()
-                if callback then task.spawn(callback, input.Text, enter) end
+                TweenService:Create(bStroke,TW.Fast,{Color=Theme.Stroke,Transparency=0}):Play()
+                if cfg.Callback then task.spawn(cfg.Callback,input.Text,enter) end
             end)
-            return {Set=function(_,t) input.Text=t end, Get=function() return input.Text end, Instance=el}
+            return regFlag(cfg, {Set=function(_,t) input.Text=t end, Get=function() return input.Text end, Instance=el})
         end
         
-        function Tab:AddKeybind(cfg)
-            local text, default, callback = cfg, nil, function() end
-            if type(cfg) == "table" then text = cfg.Text; default = cfg.Default; callback = cfg.Callback or function() end end
-            local currentKey = default; local listening = false
-            local el = baseElement(42)
-            local btn = create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="", AutoButtonColor=false, Parent=el})
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-100,1,0), Position=UDim2.new(0,12,0,0),
-                Text=text, TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
+        function Tab:CreateKeybind(cfg)
+            cfg=cfg or {}; local currentKey=cfg.Default; local listening=false; local el=baseElement(44)
+            local btn=create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0), Text="", AutoButtonColor=false, Parent=el})
+            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-114,1,0), Position=UDim2.new(0,12,0,0),
+                Text=cfg.Name or "Keybind", TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
                 TextXAlignment=Enum.TextXAlignment.Left, Parent=btn})
-            local keyBox = create("Frame", {BackgroundColor3=Theme.Element, Size=UDim2.new(0,80,0,28),
-                Position=UDim2.new(1,-92,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=el})
-            corner(keyBox, 8); local kStroke = stroke(keyBox, Theme.Stroke, 1, 0)
-            local keyLabel = create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0),
+            local keyBox=create("Frame", {BackgroundColor3=Theme.Section, Size=UDim2.new(0,94,0,30),
+                Position=UDim2.new(1,-106,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=el})
+            corner(keyBox,8); local kStroke=stroke(keyBox,Theme.Stroke,1,0)
+            local keyLabel=create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,0,1,0),
                 Text=currentKey and currentKey.Name or "None", TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=12, Parent=keyBox})
             btn.MouseButton1Click:Connect(function()
-                listening = true; keyLabel.Text = "..."
-                TweenService:Create(kStroke, TW.Fast, {Color=Theme.StrokeAccent, Transparency=0.2}):Play()
+                listening=true; keyLabel.Text="..."
+                TweenService:Create(kStroke,TW.Fast,{Color=Theme.StrokeAccent,Transparency=0.2}):Play()
             end)
-            UserInputService.InputBegan:Connect(function(input, gpe)
-                if listening and input.UserInputType == Enum.UserInputType.Keyboard then
-                    listening = false; currentKey = input.KeyCode; keyLabel.Text = currentKey.Name
-                    TweenService:Create(kStroke, TW.Fast, {Color=Theme.Stroke, Transparency=0}):Play()
-                elseif not gpe and not listening and currentKey and input.KeyCode == currentKey then
-                    if callback then task.spawn(callback) end
+            UserInputService.InputBegan:Connect(function(input,gpe)
+                if listening and input.UserInputType==Enum.UserInputType.Keyboard then
+                    listening=false; currentKey=input.KeyCode; keyLabel.Text=currentKey.Name
+                    TweenService:Create(kStroke,TW.Fast,{Color=Theme.Stroke,Transparency=0}):Play()
+                elseif not gpe and not listening and currentKey and input.KeyCode==currentKey then
+                    if cfg.Callback then task.spawn(cfg.Callback) end
                 end
             end)
             ripple(el)
-            return {Set=function(_,k) currentKey=k; keyLabel.Text=k and k.Name or "None" end, Get=function() return currentKey end, Instance=el}
+            return regFlag(cfg, {Set=function(_,k) currentKey=k; keyLabel.Text=k and k.Name or "None" end, Get=function() return currentKey end, Instance=el})
         end
         
-        function Tab:AddColorPicker(cfg)
-            local text, default, callback = cfg, Color3.fromRGB(255,255,255), function() end
-            if type(cfg) == "table" then text = cfg.Text; default = cfg.Default; callback = cfg.Callback or function() end end
-            local color = default; local open = false
-            local el = baseElement(42); el.ClipsDescendants = true
-            local header = create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,42), Text="", AutoButtonColor=false, Parent=el})
-            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-60,1,0), Position=UDim2.new(0,12,0,0),
-                Text=text, TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
+        function Tab:CreateColorPicker(cfg)
+            cfg=cfg or {}; local color=cfg.Default or Color3.fromRGB(255,255,255)
+            local open=false; local el=baseElement(44); el.ClipsDescendants=true
+            local header=create("TextButton", {BackgroundTransparency=1, Size=UDim2.new(1,0,0,44), Text="", AutoButtonColor=false, Parent=el})
+            create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(1,-74,1,0), Position=UDim2.new(0,12,0,0),
+                Text=cfg.Name or "Color", TextColor3=Theme.Text, Font=Theme.Font, TextSize=13,
                 TextXAlignment=Enum.TextXAlignment.Left, Parent=header})
-            local preview = create("Frame", {BackgroundColor3=color, Size=UDim2.new(0,36,0,22),
-                Position=UDim2.new(1,-48,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=el})
-            corner(preview, 6); stroke(preview, Theme.Stroke, 1, 0)
-            local holder = create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,48),
-                Size=UDim2.new(1,-24,0,80), Parent=el})
+            local preview=create("Frame", {BackgroundColor3=color, Size=UDim2.new(0,44,0,24),
+                Position=UDim2.new(1,-56,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=el})
+            corner(preview,6); stroke(preview,Theme.Stroke,1,0)
+            local holder=create("Frame", {BackgroundTransparency=1, Position=UDim2.new(0,12,0,50),
+                Size=UDim2.new(1,-24,0,94), Parent=el})
             create("UIListLayout", {Padding=UDim.new(0,6), Parent=holder})
-            local r, g, b = math.floor(color.R*255), math.floor(color.G*255), math.floor(color.B*255)
+            local r,g,b = math.floor(color.R*255), math.floor(color.G*255), math.floor(color.B*255)
             local function apply()
-                color = Color3.fromRGB(r,g,b); preview.BackgroundColor3 = color
-                if callback then task.spawn(callback, color) end
+                color=Color3.fromRGB(r,g,b); preview.BackgroundColor3=color
+                if cfg.Callback then task.spawn(cfg.Callback,color) end
             end
+            local channels = {}
             local function makeChannel(name, getv, setv)
-                local row = create("Frame", {BackgroundColor3=Theme.Element, Size=UDim2.new(1,0,0,22), Parent=holder})
-                corner(row, 6)
+                local row=create("Frame", {BackgroundColor3=Theme.Section, Size=UDim2.new(1,0,0,26), Parent=holder})
+                corner(row,6)
                 create("TextLabel", {BackgroundTransparency=1, Size=UDim2.new(0,20,1,0), Position=UDim2.new(0,8,0,0),
-                    Text=name, TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=11, Parent=row})
-                local barBack = create("Frame", {BackgroundColor3=Theme.Element, Size=UDim2.new(1,-40,0,4),
+                    Text=name, TextColor3=Theme.Accent, Font=Theme.FontBold, TextSize=12, Parent=row})
+                local barBack=create("Frame", {BackgroundColor3=Theme.ToggleOff, Size=UDim2.new(1,-40,0,5),
                     Position=UDim2.new(0,32,0.5,0), AnchorPoint=Vector2.new(0,0.5), Parent=row})
-                corner(barBack, 2)
-                local fill = create("Frame", {BackgroundColor3=Theme.Accent, Size=UDim2.new(getv()/255,0,1,0), Parent=barBack})
-                corner(fill, 2)
-                local dragging = false
+                corner(barBack,3)
+                local fill=create("Frame", {BackgroundColor3=Theme.Accent, Size=UDim2.new(getv()/255,0,1,0), Parent=barBack})
+                corner(fill,3)
+                local dragging=false
                 local function upd(x)
-                    local rel = math.clamp((x-barBack.AbsolutePosition.X)/barBack.AbsoluteSize.X, 0, 1)
+                    local rel=math.clamp((x-barBack.AbsolutePosition.X)/barBack.AbsoluteSize.X,0,1)
                     setv(math.floor(rel*255)); fill.Size=UDim2.new(rel,0,1,0); apply()
                 end
                 barBack.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=true; upd(i.Position.X) end end)
                 UserInputService.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then dragging=false end end)
                 UserInputService.InputChanged:Connect(function(i) if dragging and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then upd(i.Position.X) end end)
+                channels[name] = function() fill.Size = UDim2.new(getv()/255, 0, 1, 0) end
             end
             makeChannel("R", function() return r end, function(v) r=v end)
             makeChannel("G", function() return g end, function(v) g=v end)
             makeChannel("B", function() return b end, function(v) b=v end)
             header.MouseButton1Click:Connect(function()
-                open = not open
-                TweenService:Create(el, TW.Normal, {Size=UDim2.new(1,0,0,open and 138 or 42)}):Play()
+                open=not open
+                TweenService:Create(el,TW.Normal,{Size=UDim2.new(1,0,0,open and 152 or 44)}):Play()
             end)
             ripple(el)
-            return {Set=function(_,c) color=c; r,g,b=math.floor(c.R*255),math.floor(c.G*255),math.floor(c.B*255); preview.BackgroundColor3=c; if callback then task.spawn(callback,color) end end, Get=function() return color end, Instance=el}
+            return regFlag(cfg, {
+                Set=function(_,c)
+                    color=c; r,g,b=math.floor(c.R*255),math.floor(c.G*255),math.floor(c.B*255)
+                    preview.BackgroundColor3=c
+                    for _, refresh in pairs(channels) do refresh() end
+                    if cfg.Callback then task.spawn(cfg.Callback,color) end
+                end,
+                Get=function() return color end,
+                Instance=el,
+            })
         end
         
         return Tab
+    end
+    
+    -- BUILT-IN SETTINGS TAB (your original code preserved)
+    do
+        local HttpService     = game:GetService("HttpService")
+        local TeleportService = game:GetService("TeleportService")
+        local LocalPlayer     = Players.LocalPlayer
+        local SettingsTab = Window:CreateTab("Settings")
+        
+        SettingsTab:CreateSection("Server")
+        SettingsTab:CreateButton({
+            Name = "Rejoin Server",
+            Callback = function()
+                Window:Notify({Title="Server", Content="Rejoining...", Type="Info"})
+                TeleportService:Teleport(game.PlaceId, LocalPlayer)
+            end,
+        })
+        SettingsTab:CreateButton({
+            Name = "Server Hop",
+            Callback = function()
+                Window:Notify({Title="Server", Content="Searching for a server...", Type="Info"})
+                local ok, data = pcall(function()
+                    return HttpService:JSONDecode(game:HttpGet(
+                        "https://games.roblox.com/v1/games/"..game.PlaceId..
+                        "/servers/Public?sortOrder=Asc&limit=100"
+                    ))
+                end)
+                if ok and data and data.data then
+                    for _, srv in ipairs(data.data) do
+                        if srv.playing < srv.maxPlayers and srv.id ~= game.JobId then
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, LocalPlayer)
+                            return
+                        end
+                    end
+                end
+                Window:Notify({Title="Server", Content="No servers found!", Type="Error"})
+            end,
+        })
+        SettingsTab:CreateButton({
+            Name = "Join Smallest Server",
+            Callback = function()
+                Window:Notify({Title="Server", Content="Finding smallest server...", Type="Info"})
+                local ok, data = pcall(function()
+                    return HttpService:JSONDecode(game:HttpGet(
+                        "https://games.roblox.com/v1/games/"..game.PlaceId..
+                        "/servers/Public?sortOrder=Asc&limit=100"
+                    ))
+                end)
+                if ok and data and data.data then
+                    local best, bestCount = nil, math.huge
+                    for _, srv in ipairs(data.data) do
+                        if srv.playing < srv.maxPlayers and srv.id ~= game.JobId and srv.playing < bestCount then
+                            best, bestCount = srv.id, srv.playing
+                        end
+                    end
+                    if best then
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, best, LocalPlayer)
+                        return
+                    end
+                end
+                Window:Notify({Title="Server", Content="No servers found!", Type="Error"})
+            end,
+        })
+        
+        SettingsTab:CreateSection("Configuration")
+        local placeFolder   = tostring(game.PlaceId or "universal")
+        local CONFIG_FOLDER = "MoroLumina/"..placeFolder
+        local hasFS = (writefile ~= nil and readfile ~= nil and listfiles ~= nil)
+        if hasFS and makefolder then
+            pcall(function()
+                if not isfolder("MoroLumina") then makefolder("MoroLumina") end
+                if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+            end)
+        end
+        local currentConfigName = ""
+        local function serialize(v)
+            if typeof(v) == "Color3" then
+                return {__color = true, R = v.R, G = v.G, B = v.B}
+            elseif typeof(v) == "EnumItem" then
+                return {__enum = true, Name = v.Name}
+            end
+            return v
+        end
+        local function deserialize(v)
+            if type(v) == "table" then
+                if v.__color then return Color3.new(v.R, v.G, v.B) end
+                if v.__enum then return Enum.KeyCode[v.Name] end
+            end
+            return v
+        end
+        local function gatherConfig()
+            local out = {}
+            for flag, obj in pairs(Window._flags) do
+                local ok, val = pcall(function() return obj.Get() end)
+                if ok then out[flag] = serialize(val) end
+            end
+            return out
+        end
+        local function applyConfig(tbl)
+            for flag, val in pairs(tbl) do
+                local obj = Window._flags[flag]
+                if obj and obj.Set then
+                    pcall(function() obj:Set(deserialize(val)) end)
+                end
+            end
+        end
+        local function getConfigList()
+            local names = {}
+            if hasFS then
+                local ok, files = pcall(listfiles, CONFIG_FOLDER)
+                if ok and files then
+                    for _, path in ipairs(files) do
+                        local name = path:match("([^/\\]+)%.json$")
+                        if name then table.insert(names, name) end
+                    end
+                end
+            end
+            return names
+        end
+        local configDropdown
+        SettingsTab:CreateTextbox({
+            Name = "Config Name",
+            Placeholder = "my_config",
+            Callback = function(txt) currentConfigName = txt end,
+        })
+        SettingsTab:CreateButton({
+            Name = "Create / Save Config",
+            Callback = function()
+                local name = currentConfigName
+                if name == "" or not name then
+                    Window:Notify({Title="Config", Content="Enter a config name first!", Type="Warning"})
+                    return
+                end
+                if not hasFS then
+                    Window:Notify({Title="Config", Content="File system not supported!", Type="Error"})
+                    return
+                end
+                local data = HttpService:JSONEncode(gatherConfig())
+                local ok = pcall(writefile, CONFIG_FOLDER.."/"..name..".json", data)
+                if ok then
+                    Window:Notify({Title="Config", Content="Saved '"..name.."'", Type="Success"})
+                    if configDropdown then configDropdown:Refresh(getConfigList()) end
+                else
+                    Window:Notify({Title="Config", Content="Failed to save!", Type="Error"})
+                end
+            end,
+        })
+        configDropdown = SettingsTab:CreateDropdown({
+            Name = "Config List",
+            Options = getConfigList(),
+            Default = "Select...",
+            Callback = function(v) currentConfigName = v end,
+        })
+        SettingsTab:CreateButton({
+            Name = "Load Config",
+            Callback = function()
+                local name = currentConfigName
+                if name == "" or name == "Select..." or not name then
+                    Window:Notify({Title="Config", Content="Select a config first!", Type="Warning"})
+                    return
+                end
+                if not hasFS then return end
+                local path = CONFIG_FOLDER.."/"..name..".json"
+                if not isfile(path) then
+                    Window:Notify({Title="Config", Content="Config not found!", Type="Error"})
+                    return
+                end
+                local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
+                if ok and data then
+                    applyConfig(data)
+                    Window:Notify({Title="Config", Content="Loaded '"..name.."'", Type="Success"})
+                else
+                    Window:Notify({Title="Config", Content="Failed to load!", Type="Error"})
+                end
+            end,
+        })
+        SettingsTab:CreateButton({
+            Name = "Delete Config",
+            Callback = function()
+                local name = currentConfigName
+                if name == "" or name == "Select..." or not name then
+                    Window:Notify({Title="Config", Content="Select a config first!", Type="Warning"})
+                    return
+                end
+                if not hasFS or not delfile then return end
+                local path = CONFIG_FOLDER.."/"..name..".json"
+                pcall(delfile, path)
+                Window:Notify({Title="Config", Content="Deleted '"..name.."'", Type="Success"})
+                if configDropdown then configDropdown:Refresh(getConfigList()) end
+            end,
+        })
+        SettingsTab:CreateButton({
+            Name = "Refresh Config List",
+            Callback = function()
+                if configDropdown then configDropdown:Refresh(getConfigList()) end
+                Window:Notify({Title="Config", Content="List refreshed", Type="Info"})
+            end,
+        })
+        
+        SettingsTab:CreateSection("Danger Zone")
+        SettingsTab:CreateButton({
+            Name = "Unload Menu",
+            Callback = function()
+                for _, t in ipairs(Window._toggles) do
+                    pcall(function() if t.Get() then t:Set(false) end end)
+                end
+                Window:Notify({Title="MoroLumina", Content="Unloaded. Bye!", Type="Warning"})
+                task.delay(0.4, function()
+                    if Window.Gui then Window.Gui:Destroy() end
+                end)
+            end,
+        })
     end
     
     return Window
