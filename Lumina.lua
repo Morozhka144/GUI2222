@@ -488,24 +488,69 @@ function Library:CreateWindow(cfg)
 
     --========================= MOBILE FLOAT BUTTON =========================--
     do
-         -- (продолжение блока MOBILE FLOAT BUTTON)
-        local fdrag, fStart, fStartPos, fMoved
+        -- 1) СНАЧАЛА создаём кнопку
+        local fab = create("TextButton", {
+            Name = "MobileFAB",
+            BackgroundColor3 = Theme.Accent,
+            Position = UDim2.new(0, 20, 0, 120),
+            Size = UDim2.fromOffset(48, 48),
+            Text = "",
+            AutoButtonColor = false,
+            ZIndex = 50,
+            Parent = Window.Gui,   -- родитель ScreenGui, а НЕ canvas (чтобы не пропал при сворачивании)
+        })
+        corner(fab, 24)
+        stroke(fab, Theme.StrokeLight, 1, 0.3)
+        if registerAccent then registerAccent(fab, "BackgroundColor3") end
+
+        local icon = create("ImageLabel", {
+            BackgroundTransparency = 1,
+            Image = "rbxassetid://3926305904",
+            ImageRectOffset = Vector2.new(764, 244),
+            ImageRectSize = Vector2.new(36, 36),
+            ImageColor3 = Theme.Bg,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(26, 26),
+            ZIndex = 51,
+            Parent = fab,
+        })
+
+        -- показываем только на мобильных (по желанию)
+        fab.Visible = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
+
+        -- 2) ТЕПЕРЬ вешаем события (fab гарантированно существует)
+        local fdrag, fStart, fStartPos, fMoved = false, nil, nil, false
+
         fab.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                fdrag = true; fMoved = false; fStart = i.Position; fStartPos = fab.Position
+            if i.UserInputType == Enum.UserInputType.MouseButton1
+            or i.UserInputType == Enum.UserInputType.Touch then
+                fdrag = true
+                fMoved = false
+                fStart = i.Position
+                fStartPos = fab.Position
             end
         end)
+
         UserInputService.InputChanged:Connect(function(i)
-            if fdrag and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            if fdrag and (i.UserInputType == Enum.UserInputType.MouseMovement
+            or i.UserInputType == Enum.UserInputType.Touch) then
                 local d = i.Position - fStart
                 if d.Magnitude > 4 then fMoved = true end
-                fab.Position = UDim2.new(0, fStartPos.X.Offset + d.X, 0, fStartPos.Y.Offset + d.Y)
+                fab.Position = UDim2.new(
+                    0, fStartPos.X.Offset + d.X,
+                    0, fStartPos.Y.Offset + d.Y
+                )
             end
         end)
+
         UserInputService.InputEnded:Connect(function(i)
-            if fdrag and (i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch) then
+            if i.UserInputType == Enum.UserInputType.MouseButton1
+            or i.UserInputType == Enum.UserInputType.Touch then
+                if fdrag and not fMoved then
+                    Window:Toggle()   -- тап без движения = открыть/закрыть меню
+                end
                 fdrag = false
-                if not fMoved then Window:Toggle() end
             end
         end)
     end
