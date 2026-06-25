@@ -285,7 +285,7 @@ function Library:CreateWindow(cfg)
         Name = "Window",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(500, 400),
+        Size = UDim2.fromOffset(600, 340),
         BackgroundColor3 = Theme.Bg,
         GroupTransparency = 0,
         Parent = gui,
