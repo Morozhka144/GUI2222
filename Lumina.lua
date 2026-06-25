@@ -1073,6 +1073,241 @@ function Library:CreateWindow(cfg)
                 return api
             end
 
+
+            --=====================================================================--
+            --                       MULTI DROPDOWN                                  --
+            --=====================================================================--
+            function Section:AddMultiDropdown(o)
+                o = o or {}
+                local options  = o.Options or {}
+                local selected = {}                       -- set: { [option] = true }
+                local order    = {}                       -- preserve selection order
+                local maxSel   = o.Max or math.huge       -- limit selections
+                local open     = false
+
+                -- init defaults
+                for _, d in ipairs(o.Default or {}) do
+                    selected[d] = true
+                    table.insert(order, d)
+                end
+
+                local f = row(o.Sub and 44 or 36)
+                labelBlock(f, o.Name or "Multi", o.Icon, o.Sub, 150)
+
+                -- selection display button
+                local boxSel = create("TextButton", {
+                    BackgroundColor3 = Theme.Bg,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(140, 28),
+                    Text = "", AutoButtonColor = false, Parent = f,
+                })
+                corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
+
+                local selLbl = create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(8, 0),
+                    Size = UDim2.new(1, -28, 1, 0),
+                    TextColor3 = Theme.Text, Font = Theme.Font, TextSize = 13,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Parent = boxSel,
+                })
+
+                local arrow = create("ImageLabel", {
+                    BackgroundTransparency = 1, Image = "rbxassetid://3926305904",
+                    ImageRectOffset = Vector2.new(364, 364), ImageRectSize = Vector2.new(36, 36),
+                    ImageColor3 = Theme.SubText,
+                    AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0),
+                    Size = UDim2.fromOffset(16, 16), Parent = boxSel,
+                })
+
+                -- count badge (e.g. "3")
+                local badge = create("Frame", {
+                    BackgroundColor3 = Theme.Accent,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -26, 0.5, 0),
+                    Size = UDim2.fromOffset(18, 18),
+                    Visible = false, Parent = boxSel,
+                })
+                corner(badge, 9)
+                registerAccent(badge, "BackgroundColor3")
+                local badgeTxt = create("TextLabel", {
+                    BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0),
+                    Text = "0", TextColor3 = Theme.Bg, Font = Theme.FontBold, TextSize = 11,
+                    Parent = badge,
+                })
+
+                -- expandable list container
+                local listFrame = create("Frame", {
+                    BackgroundColor3 = Theme.Bg,
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.None,
+                    Visible = false, ClipsDescendants = true,
+                    LayoutOrder = nextOrder(), Parent = box,
+                })
+                corner(listFrame, 8); stroke(listFrame, Theme.StrokeLight, 1, 0.2)
+
+                local scroll = create("ScrollingFrame", {
+                    BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0),
+                    ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.StrokeLight,
+                    CanvasSize = UDim2.new(0,0,0,0),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y, Parent = listFrame,
+                })
+                padding(scroll, nil, 6, 6, 6, 6)
+                create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+
+                -- update top button label + badge
+                local function updateDisplay()
+                    local n = #order
+                    badge.Visible = n > 0
+                    badgeTxt.Text = tostring(n)
+                    if n == 0 then
+                        selLbl.Text = o.Placeholder or "None"
+                        selLbl.TextColor3 = Theme.SubText
+                        selLbl.Size = UDim2.new(1, -28, 1, 0)
+                    else
+                        selLbl.TextColor3 = Theme.Text
+                        selLbl.Size = UDim2.new(1, -50, 1, 0)
+                        selLbl.Text = table.concat(order, ", ")
+                    end
+                end
+
+                local rowRefs = {}  -- option -> {btn, check, lbl}
+
+                local function setOption(opt, state, fire)
+                    local ref = rowRefs[opt]
+                    if state and not selected[opt] then
+                        if #order >= maxSel then return end  -- limit reached
+                        selected[opt] = true
+                        table.insert(order, opt)
+                    elseif (not state) and selected[opt] then
+                        selected[opt] = nil
+                        for i, v in ipairs(order) do if v == opt then table.remove(order, i) break end end
+                    end
+                    if ref then
+                        tween(ref.check, TW.Fast, {
+                            BackgroundColor3 = selected[opt] and Theme.Accent or Theme.Element,
+                            BackgroundTransparency = 0,
+                        })
+                        ref.tick.Visible = selected[opt] == true
+                        tween(ref.lbl, TW.Fast, { TextColor3 = selected[opt] and Theme.Text or Theme.SubText })
+                    end
+                    updateDisplay()
+                    if fire and o.Callback then
+                        task.spawn(o.Callback, table.clone(order), opt, state)
+                    end
+                end
+
+                local function rebuild()
+                    rowRefs = {}
+                    for _, c in ipairs(scroll:GetChildren()) do
+                        if c:IsA("TextButton") then c:Destroy() end
+                    end
+                    for i, opt in ipairs(options) do
+                        local ob = create("TextButton", {
+                            BackgroundColor3 = Theme.Element,
+                            BackgroundTransparency = 0.5,
+                            Size = UDim2.new(1, 0, 0, 28),
+                            Text = "", AutoButtonColor = false,
+                            LayoutOrder = i, Parent = scroll,
+                        })
+                        corner(ob, 6)
+
+                        -- checkbox
+                        local check = create("Frame", {
+                            BackgroundColor3 = selected[opt] and Theme.Accent or Theme.Element,
+                            AnchorPoint = Vector2.new(0, 0.5),
+                            Position = UDim2.new(0, 8, 0.5, 0),
+                            Size = UDim2.fromOffset(16, 16), Parent = ob,
+                        })
+                        corner(check, 4); stroke(check, Theme.StrokeLight, 1, 0.3)
+                        local tick = create("ImageLabel", {
+                            BackgroundTransparency = 1,
+                            Image = "rbxassetid://3926305904",
+                            ImageRectOffset = Vector2.new(312, 4), ImageRectSize = Vector2.new(24, 24),
+                            ImageColor3 = Theme.Bg,
+                            AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+                            Size = UDim2.fromOffset(14, 14),
+                            Visible = selected[opt] == true, Parent = check,
+                        })
+
+                        local lbl = create("TextLabel", {
+                            BackgroundTransparency = 1,
+                            Position = UDim2.fromOffset(32, 0),
+                            Size = UDim2.new(1, -36, 1, 0),
+                            Text = tostring(opt),
+                            TextColor3 = selected[opt] and Theme.Text or Theme.SubText,
+                            Font = Theme.Font, TextSize = 13,
+                            TextXAlignment = Enum.TextXAlignment.Left, Parent = ob,
+                        })
+
+                        rowRefs[opt] = { btn = ob, check = check, tick = tick, lbl = lbl }
+
+                        ob.MouseEnter:Connect(function() tween(ob, TW.Fast, { BackgroundTransparency = 0.2 }) end)
+                        ob.MouseLeave:Connect(function() tween(ob, TW.Fast, { BackgroundTransparency = 0.5 }) end)
+                        ob.MouseButton1Click:Connect(function()
+                            setOption(opt, not selected[opt], true)
+                        end)
+                    end
+                    updateDisplay()
+                end
+                rebuild()
+
+                boxSel.MouseButton1Click:Connect(function()
+                    open = not open
+                    if open then
+                        listFrame.Visible = true
+                        local h = math.min(#options * 32 + 12, 180)
+                        tween(arrow, TW.Fast, { Rotation = 180 })
+                        tween(listFrame, TW.Normal, { Size = UDim2.new(1, 0, 0, h) })
+                    else
+                        tween(arrow, TW.Fast, { Rotation = 0 })
+                        tween(listFrame, TW.Fast, { Size = UDim2.new(1, 0, 0, 0) })
+                        task.delay(0.2, function() if not open then listFrame.Visible = false end end)
+                    end
+                end)
+
+                -- public API
+                local api = {}
+                function api.Get() return table.clone(order) end
+                function api.GetSet() return table.clone(selected) end
+                function api.Set(list)
+                    for opt in pairs(table.clone(selected)) do setOption(opt, false, false) end
+                    for _, opt in ipairs(list or {}) do setOption(opt, true, false) end
+                    if o.Callback then task.spawn(o.Callback, table.clone(order)) end
+                end
+                function api.SelectAll()
+                    for _, opt in ipairs(options) do setOption(opt, true, false) end
+                    if o.Callback then task.spawn(o.Callback, table.clone(order)) end
+                end
+                function api.ClearAll()
+                    for opt in pairs(table.clone(selected)) do setOption(opt, false, false) end
+                    if o.Callback then task.spawn(o.Callback, {}) end
+                end
+                function api.IsSelected(opt) return selected[opt] == true end
+                function api.Refresh(newOpts, keep)
+                    options = newOpts
+                    if not keep then
+                        selected = {}; order = {}
+                    else
+                        -- drop selections no longer valid
+                        local valid = {}
+                        for _, o2 in ipairs(newOpts) do valid[o2] = true end
+                        local newOrder = {}
+                        for _, opt in ipairs(order) do
+                            if valid[opt] then table.insert(newOrder, opt) else selected[opt] = nil end
+                        end
+                        order = newOrder
+                    end
+                    rebuild()
+                end
+
+                -- config flag: store/restore the list of selected options
+                bindFlag(o.Flag, api.Get, api.Set)
+                return api
+            end
+
             --=====================================================================--
             --                            TEXTBOX                                    --
             --=====================================================================--
