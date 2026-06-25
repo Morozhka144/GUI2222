@@ -303,6 +303,7 @@ function Library:CreateWindow(cfg)
         ZIndex = canvas.ZIndex - 1,
         Parent = gui,
     })
+    local fxScale = create("UIScale", { Scale = winScale.Scale, Parent = fxHolder })
 
     -- серая обводка окна (как отдельный эффект, гаснет синхронно)
     local borderFrame = create("Frame", {
@@ -319,9 +320,12 @@ function Library:CreateWindow(cfg)
     local function syncFX()
         fxHolder.Position = canvas.Position
         fxHolder.Size = canvas.Size
+        fxScale.Scale = winScale.Scale   -- ← синхроним масштаб эффектов
     end
     canvas:GetPropertyChangedSignal("Position"):Connect(syncFX)
     canvas:GetPropertyChangedSignal("Size"):Connect(syncFX)
+    -- следим за масштабом окна, чтобы эффекты тоже масштабировались
+    winScale:GetPropertyChangedSignal("Scale"):Connect(syncFX)
 
     -- тень (чёрная)
     create("ImageLabel", {
@@ -513,34 +517,108 @@ function Library:CreateWindow(cfg)
 
     --========================= RESIZING =========================--
     do
-        local grip = create("TextButton", {
-            Text = "", BackgroundTransparency = 1, AutoButtonColor = false,
-            AnchorPoint = Vector2.new(1, 1),
-            Position = UDim2.new(1, 0, 1, 0),
-            Size = UDim2.fromOffset(20, 20),
-            Parent = canvas,
-        })
-        local resizing, resStart, startSize
-        grip.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
-                resizing = true; resStart = i.Position; startSize = canvas.Size
+        local EDGE = 8          -- толщина зоны захвата у краёв (в пикселях)
+        local MIN_X, MIN_Y = 480, 300
+        local MAX_X, MAX_Y = 1200, 800
+
+        local resizing = false
+        local resStart, startSize, startPos
+        local dirX, dirY = 0, 0   -- -1 = лево/верх, 1 = право/низ, 0 = нет
+
+        -- определяем, за какой край/угол схватили (по позиции мыши относительно canvas)
+        local function getEdge(px, py)
+            local ap = canvas.AbsolutePosition
+            local as = canvas.AbsoluteSize
+            local lx = px - ap.X            -- координата внутри окна
+            local ly = py - ap.Y
+            local dx, dy = 0, 0
+            if lx <= EDGE then dx = -1
+            elseif lx >= as.X - EDGE then dx = 1 end
+            if ly <= EDGE then dy = -1
+            elseif ly >= as.Y - EDGE then dy = 1 end
+            return dx, dy
+        end
+
+        -- ловим нажатие на самом canvas (на любом крае)
+        canvas.InputBegan:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1
+            or i.UserInputType == Enum.UserInputType.Touch then
+                local dx, dy = getEdge(i.Position.X, i.Position.Y)
+                if dx ~= 0 or dy ~= 0 then
+                    resizing = true
+                    dirX, dirY = dx, dy
+                    resStart = i.Position
+                    startSize = canvas.Size
+                    startPos = canvas.Position
+                end
             end
         end)
+
         UserInputService.InputChanged:Connect(function(i)
-            if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement
+            or i.UserInputType == Enum.UserInputType.Touch) then
                 local d = i.Position - resStart
-                local nx = math.clamp(startSize.X.Offset + d.X, 640, 1200)
-                local ny = math.clamp(startSize.Y.Offset + d.Y, 420, 800)
-                canvas.Size = UDim2.fromOffset(nx, ny)
+
+                local newW = startSize.X.Offset
+                local newH = startSize.Y.Offset
+                local newPX = startPos.X.Offset
+                local newPY = startPos.Y.Offset
+
+                -- т.к. AnchorPoint = (0.5,0.5), при тяге за край смещаем центр на половину дельты
+                if dirX == 1 then
+                    newW = math.clamp(startSize.X.Offset + d.X, MIN_X, MAX_X)
+                    local applied = newW - startSize.X.Offset
+                    newPX = startPos.X.Offset + applied/2
+                elseif dirX == -1 then
+                    newW = math.clamp(startSize.X.Offset - d.X, MIN_X, MAX_X)
+                    local applied = newW - startSize.X.Offset
+                    newPX = startPos.X.Offset - applied/2
+                end
+
+                if dirY == 1 then
+                    newH = math.clamp(startSize.Y.Offset + d.Y, MIN_Y, MAX_Y)
+                    local applied = newH - startSize.Y.Offset
+                    newPY = startPos.Y.Offset + applied/2
+                elseif dirY == -1 then
+                    newH = math.clamp(startSize.Y.Offset - d.Y, MIN_Y, MAX_Y)
+                    local applied = newH - startSize.Y.Offset
+                    newPY = startPos.Y.Offset - applied/2
+                end
+
+                canvas.Size = UDim2.new(startPos.X.Scale, newW, startPos.Y.Scale, newH)
+                canvas.Position = UDim2.new(startPos.X.Scale, newPX, startPos.Y.Scale, newPY)
             end
         end)
+
         UserInputService.InputEnded:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            if i.UserInputType == Enum.UserInputType.MouseButton1
+            or i.UserInputType == Enum.UserInputType.Touch then
                 resizing = false
+                dirX, dirY = 0, 0
             end
+        end)
+
+        -- меняем курсор у краёв (только мышь)
+        canvas.InputChanged:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseMovement and not resizing then
+                local dx, dy = getEdge(i.Position.X, i.Position.Y)
+                if dx ~= 0 and dy ~= 0 then
+                    UserInputService.MouseIcon = (dx == dy)
+                        and "rbxasset://SystemCursors/SizeNWSE"
+                        or  "rbxasset://SystemCursors/SizeNESW"
+                elseif dx ~= 0 then
+                    UserInputService.MouseIcon = "rbxasset://SystemCursors/SizeEW"
+                elseif dy ~= 0 then
+                    UserInputService.MouseIcon = "rbxasset://SystemCursors/SizeNS"
+                else
+                    UserInputService.MouseIcon = ""
+                end
+            end
+        end)
+        canvas.MouseLeave:Connect(function()
+            if not resizing then UserInputService.MouseIcon = "" end
         end)
     end
-
     --========================= TOGGLE / OPEN-CLOSE =========================--
     local isOpen = true
     function Window:Toggle(state)
