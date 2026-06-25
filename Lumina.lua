@@ -329,13 +329,20 @@ function Library:CreateWindow(cfg)
     })
     registerAccent(glow, "ImageColor3")
 
-    -- мягкая пульсация свечения
+    -- мягкая пульсация свечения (только когда меню открыто)
+    local pulseActive = true   -- управляется из Window:Toggle
+    Window._setPulse = function(v) pulseActive = v end
     task.spawn(function()
         while glow.Parent do
-            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.45 })
-            task.wait(1.8)
-            tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.7 })
-            task.wait(1.8)
+            if pulseActive then
+                tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.45 })
+                task.wait(1.8)
+                if not pulseActive then continue end
+                tween(glow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { ImageTransparency = 0.7 })
+                task.wait(1.8)
+            else
+                task.wait(0.1)
+            end
         end
     end)
 
@@ -522,6 +529,7 @@ function Library:CreateWindow(cfg)
         local borderStroke = borderFrame:FindFirstChildOfClass("UIStroke")
 
         if isOpen then
+            if Window._setPulse then Window._setPulse(true) end   -- ← включаем пульсацию
             canvas.Visible = true
             fxHolder.Visible = true
             winScale.Scale = 0.95
@@ -534,6 +542,7 @@ function Library:CreateWindow(cfg)
             end
             if borderStroke then tween(borderStroke, TW.Normal, { Transparency = 0 }) end
         else
+            if Window._setPulse then Window._setPulse(false) end  -- ← ВЫКЛЮЧАЕМ пульсацию
             tween(winScale, TW.Normal, { Scale = 0.95 })
             for _, ch in ipairs(fxHolder:GetChildren()) do
                 if ch:IsA("ImageLabel") then
@@ -550,7 +559,6 @@ function Library:CreateWindow(cfg)
             end)
         end
     end
-
     local toggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift
     UserInputService.InputBegan:Connect(function(i, gpe)
         if gpe then return end
@@ -577,19 +585,20 @@ function Library:CreateWindow(cfg)
         registerAccent(fabStroke, "Color")
         registerAccent(fab, "TextColor3")
 
-        -- свечение вокруг кнопки
-        create("ImageLabel", {
+        -- свечение вокруг кнопки (слабое, под кнопкой)
+        local fabGlow = create("ImageLabel", {
             BackgroundTransparency = 1,
             Image = "rbxassetid://6014261993",
             ImageColor3 = Theme.Accent,
-            ImageTransparency = 0.7,
+            ImageTransparency = 0.85,
             ScaleType = Enum.ScaleType.Slice,
             SliceCenter = Rect.new(49,49,450,450),
-            Size = UDim2.new(1, 30, 1, 30),
-            Position = UDim2.new(0, -15, 0, -15),
+            Size = UDim2.new(1, 24, 1, 24),
+            Position = UDim2.new(0, -12, 0, -12),
             ZIndex = 49,
             Parent = fab,
         })
+        registerAccent(fabGlow, "ImageColor3")
 
         -- показываем на всех устройствах (убери условие если хочешь только моб.)
         fab.Visible = true
@@ -886,7 +895,7 @@ function Library:CreateWindow(cfg)
             })
             corner(box, 12)
             local boxStroke = stroke(box, Theme.Accent, 1, 0.5)
-            stroke(box, Theme.Stroke, 1)
+            registerAccent(boxStroke, "Color")
             padding(box, nil, 10, 10, 12, 12)
             create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = box })
 
