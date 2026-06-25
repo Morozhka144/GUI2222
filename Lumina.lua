@@ -240,6 +240,27 @@ function Library:GetConfigs()
     return list
 end
 
+-- Автозагрузка: сохранить имя конфига для автозагрузки
+function Library:SetAutoLoad(name)
+    if not hasFS then return false end
+    return pcall(writefile, AUTO_FILE, name)
+end
+
+function Library:GetAutoLoad()
+    if not hasFS then return nil end
+    if isfile(AUTO_FILE) then
+        local ok, n = pcall(readfile, AUTO_FILE)
+        if ok and n and n ~= "" then return n end
+    end
+    return nil
+end
+
+function Library:ClearAutoLoad()
+    if hasFS and delfile and isfile(AUTO_FILE) then
+        pcall(delfile, AUTO_FILE)
+    end
+end
+
 --===================================================================================--
 --                              CREATE WINDOW                                          --
 --===================================================================================--
@@ -1670,40 +1691,154 @@ function Library:CreateWindow(cfg)
     --                       SETTINGS TAB (built-in)                                   --
     --===============================================================================--
     function Window:AddSettingsTab()
+        local cfgDrop, autoLabel
         local tab = Window:CreateTab({ Name = "Settings", Icon = "rbxassetid://3926307971" })
 
+        --========================= INTERFACE =========================--
         local theme = tab:CreateSection({ Name = "Interface" })
-        theme:AddDropdown({
-            Name = "Accent Color", Default = "Emerald",
-            Options = {"Emerald","Cyan","Purple","Crimson"},
-            Callback = function(v) setAccent(PRESET_ACCENTS[v]) end,
-        })
-        theme:AddSlider({ Name = "UI Scale", Min = 80, Max = 120, Default = 100, Suffix = "%",
-            Callback = function(v) winScale.Scale = v/100 end })
 
+        -- Масштаб ВСЕХ элементов (через winScale, дропдаун 50-150%, по умолч. 75)
+        theme:AddDropdown({
+            Name = "UI Scale",
+            Default = "75%",
+            Options = {"50%","75%","100%","125%","150%"},
+            Flag = "_UIScale",
+            Callback = function(v)
+                local num = tonumber((tostring(v):gsub("%%", ""))) or 75
+                winScale.Scale = num / 100
+            end,
+        })
+
+        -- Цвет акцента (премиальные цвета)
+        theme:AddDropdown({
+            Name = "Accent Color",
+            Default = "Emerald",
+            Options = {"Emerald","Cyan","Purple","Crimson"},
+            Flag = "_Accent",
+            Callback = function(v)
+                if PRESET_ACCENTS[v] then setAccent(PRESET_ACCENTS[v]) end
+            end,
+        })
+
+        -- применяем дефолтный масштаб 75% сразу
+        winScale.Scale = 0.75
+
+        --========================= ACTIONS =========================--
+        local actions = tab:CreateSection({ Name = "Actions" })
+        actions:AddButton({ Name = "Unload Menu", Callback = function()
+            Window.Gui:Destroy()
+        end })
+        actions:AddButton({ Name = "Rejoin Server", Callback = function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end })
+        actions:AddButton({ Name = "Server Hop", Primary = true, Callback = function()
+            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
+            local ok, servers = pcall(function()
+                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+                return HttpService:JSONDecode(game:HttpGet(url))
+            end)
+            if ok and servers and servers.data then
+                for _, s in ipairs(servers.data) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        pcall(function()
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                        end)
+                        return
+                    end
+                end
+            end
+            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
+        end })
+
+        --========================= CONFIGURATION =========================--
         tab:Column("right")
         local cfgSec = tab:CreateSection({ Name = "Configuration" })
-        local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config" })
-        local cfgDrop = cfgSec:AddDropdown({ Name = "Saved", Options = Library:GetConfigs(), Default = "" })
 
-        cfgSec:AddButton({ Name = "Save Config", Primary = true, Callback = function()
+        local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config" })
+
+        cfgSec:AddButton({ Name = "Create Config", Primary = true, Callback = function()
             local n = nameBox.Get()
-            if n ~= "" then
-                Library:SaveConfig(n)
+            n = (n or ""):gsub("[^%w_%- ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if n == "" then
+                Window:Notify({ Title = "Config", Content = "Enter a name first.", Type = "Warning" })
+                return
+            end
+            if Library:SaveConfig(n) then
                 cfgDrop.Refresh(Library:GetConfigs(), true)
-                Window:Notify({ Title = "Config", Content = "Saved '"..n.."'", Type = "Success" })
+                cfgDrop.Set(n)
+                Window:Notify({ Title = "Config", Content = "Created '"..n.."'", Type = "Success" })
+            else
+                Window:Notify({ Title = "Config", Content = "Failed to create.", Type = "Error" })
             end
         end })
-        cfgSec:AddButton({ Name = "Load Config", Callback = function()
+
+        -- объявляем cfgDrop через локал, чтобы кнопки выше его видели
+        cfgDrop = cfgSec:AddDropdown({
+            Name = "Select Config",
+            Options = Library:GetConfigs(),
+            Default = (Library:GetConfigs())[1] or "",
+        })
+
+        cfgSec:AddButton({ Name = "Load", Callback = function()
             local n = cfgDrop.Get()
             if n and n ~= "" then
-                Library:LoadConfig(n)
-                Window:Notify({ Title = "Config", Content = "Loaded '"..n.."'", Type = "Info" })
+                if Library:LoadConfig(n) then
+                    Window:Notify({ Title = "Config", Content = "Loaded '"..n.."'", Type = "Success" })
+                else
+                    Window:Notify({ Title = "Config", Content = "Failed to load.", Type = "Error" })
+                end
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
             end
         end })
+
+        cfgSec:AddButton({ Name = "Overwrite", Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                Library:SaveConfig(n)
+                Window:Notify({ Title = "Config", Content = "Overwritten '"..n.."'", Type = "Success" })
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        cfgSec:AddButton({ Name = "Delete", Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                Library:DeleteConfig(n)
+                if Library:GetAutoLoad() == n then Library:ClearAutoLoad() end
+                cfgDrop.Refresh(Library:GetConfigs())
+                Window:Notify({ Title = "Config", Content = "Deleted '"..n.."'", Type = "Info" })
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        cfgSec:AddButton({ Name = "Set Auto-Load", Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                Library:SetAutoLoad(n)
+                autoLabel.Set("Auto-Load: "..n)
+                Window:Notify({ Title = "Config", Content = "Auto-load set to '"..n.."'", Type = "Success" })
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        cfgSec:AddButton({ Name = "Clear Auto-Load", Callback = function()
+            Library:ClearAutoLoad()
+            autoLabel.Set("Auto-Load: none")
+            Window:Notify({ Title = "Config", Content = "Auto-load cleared.", Type = "Info" })
+        end })
+
         cfgSec:AddButton({ Name = "Refresh List", Callback = function()
             cfgDrop.Refresh(Library:GetConfigs())
+            Window:Notify({ Title = "Config", Content = "List refreshed.", Type = "Info" })
         end })
+
+        -- статус автозагрузки
+        autoLabel = cfgSec:AddLabel("Auto-Load: " .. (Library:GetAutoLoad() or "none"))
+
         return tab
     end
 
