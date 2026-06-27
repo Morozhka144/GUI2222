@@ -26,10 +26,7 @@ local LocalPlayer = Players.LocalPlayer
 --===================================================================================--
 local Lucide
 do
-    -- ЗАМЕНИ на свою raw-ссылку с GitHub!
-    -- Важно: ссылка должна быть на RAW файл, не на страницу гитхаба.
-    -- Пример: https://raw.githubusercontent.com/USER/REPO/main/pack.luau
-    local LUCIDE_URL = "https://raw.githubusercontent.com/ТВОЙ_ЮЗЕР/ТВОЙ_РЕПО/main/pack.luau"
+    local LUCIDE_URL = "https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/lucide-roblox.luau"
 
     local ok, mod = pcall(function()
         local src = game:HttpGet(LUCIDE_URL)
