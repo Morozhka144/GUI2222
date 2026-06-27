@@ -60,17 +60,31 @@ local Theme = {
 }
 
 local PRESET_ACCENTS = {
-    ["Emerald"] = Color3.fromRGB(0, 225, 134),
-    ["Cyan"]    = Color3.fromRGB(0, 200, 255),
-    ["Purple"]  = Color3.fromRGB(170, 90, 255),
-    ["Crimson"] = Color3.fromRGB(255, 60, 80),
+    ["Emerald"]   = Color3.fromRGB(0, 225, 134),
+    ["Cyan"]      = Color3.fromRGB(0, 200, 255),
+    ["Purple"]    = Color3.fromRGB(170, 90, 255),
+    ["Crimson"]   = Color3.fromRGB(255, 60, 80),
+    ["Ocean"]     = Color3.fromRGB(40, 130, 255),
+    ["Gold"]      = Color3.fromRGB(255, 200, 40),
+    ["Orange"]    = Color3.fromRGB(255, 130, 30),
+    ["Pink"]      = Color3.fromRGB(255, 90, 180),
+    ["Magenta"]   = Color3.fromRGB(255, 50, 220),
+    ["Lime"]      = Color3.fromRGB(160, 255, 60),
+    ["Teal"]      = Color3.fromRGB(0, 200, 180),
+    ["Rose"]      = Color3.fromRGB(255, 80, 120),
+    ["Indigo"]    = Color3.fromRGB(110, 80, 255),
+    ["Sky"]       = Color3.fromRGB(100, 200, 255),
+    ["Ruby"]      = Color3.fromRGB(225, 30, 60),
+    ["Mint"]      = Color3.fromRGB(80, 255, 190),
+    ["Lavender"]  = Color3.fromRGB(180, 150, 255),
+    ["Coral"]     = Color3.fromRGB(255, 110, 90),
+    ["Snow"]      = Color3.fromRGB(240, 245, 245),
+    ["Violet"]    = Color3.fromRGB(140, 60, 255),
 }
 
 --===================================================================================--
 --                                   ICON HELPER                                       --
 --===================================================================================--
--- Разрешить иконку: имя lucide ("settings") ИЛИ готовый "rbxassetid://..."
--- Возвращает: image(string?), rectSize(Vector2?), rectOffset(Vector2?)
 local function resolveIcon(name)
     if not name or name == "" then return nil end
     -- уже готовый ассет — отдаём как есть
@@ -460,15 +474,16 @@ function Library:CreateWindow(cfg)
     applyIcon(logo, "crown")
     registerAccent(logo, "ImageColor3")
 
-    create("TextLabel", {
+    local titleText = create("TextLabel", {
         BackgroundTransparency = 1,
         Position = UDim2.fromOffset(52, 0),
         Size = UDim2.new(0.5, 0, 1, 0),
         Text = cfg.Title or "MOROLUMINA.lua",
-        TextColor3 = Theme.Text, Font = Theme.FontBold, TextSize = 16,
+        Font = Theme.FontBold, TextSize = 16,
         TextXAlignment = Enum.TextXAlignment.Left,
         Parent = topbar,
     })
+    registerAccent(titleText, "TextColor3")
 
     -- topbar icon buttons
     local iconHolder = create("Frame", {
@@ -597,13 +612,14 @@ function Library:CreateWindow(cfg)
         local function getEdge(px, py)
             local ap = canvas.AbsolutePosition
             local as = canvas.AbsoluteSize
-            local lx = px - ap.X            -- координата внутри окна
+            local e = EDGE * winScale.Scale     -- ← масштабируем зону захвата
+            local lx = px - ap.X
             local ly = py - ap.Y
             local dx, dy = 0, 0
-            if lx <= EDGE then dx = -1
-            elseif lx >= as.X - EDGE then dx = 1 end
-            if ly <= EDGE then dy = -1
-            elseif ly >= as.Y - EDGE then dy = 1 end
+            if lx <= e then dx = -1
+            elseif lx >= as.X - e then dx = 1 end
+            if ly <= e then dy = -1
+            elseif ly >= as.Y - e then dy = 1 end
             return dx, dy
         end
 
@@ -625,7 +641,7 @@ function Library:CreateWindow(cfg)
         UserInputService.InputChanged:Connect(function(i)
             if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement
             or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = i.Position - resStart
+                local d = (i.Position - resStart) / winScale.scale
 
                 local newW = startSize.X.Offset
                 local newH = startSize.Y.Offset
@@ -726,10 +742,10 @@ function Library:CreateWindow(cfg)
             end)
         end
     end
-    local toggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift
+    Window._toggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift
     UserInputService.InputBegan:Connect(function(i, gpe)
         if gpe then return end
-        if i.KeyCode == toggleKey then Window:Toggle() end
+        if i.KeyCode == Window._toggleKey then Window:Toggle() end
     end)
 
     --========================= MOBILE FLOAT BUTTON =========================--
@@ -859,7 +875,7 @@ function Library:CreateWindow(cfg)
         -- accent-полоса слева
         create("Frame", {
             BackgroundColor3 = col, BorderSizePixel = 0,
-            Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 0, 0, 6),
+            Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 3, 0, 6),
             ZIndex = 2, Parent = card,
         })
 
@@ -1855,18 +1871,33 @@ function Library:CreateWindow(cfg)
             end,
         })
 
+        -- Клавиша открытия/закрытия меню
+        theme:AddKeybind({
+            Name = "Menu Toggle",
+            Default = Window._toggleKey,
+            Flag = "_MenuKey",
+            ChangedCallback = function(key)
+                if typeof(key) == "EnumItem" and key.EnumType == Enum.KeyCode then
+                    Window._toggleKey = key
+                end
+            end,
+        })
+
         -- Цвет акцента (премиальные цвета)
         theme:AddDropdown({
             Name = "Accent Color",
             Default = "Emerald",
-            Options = {"Emerald","Cyan","Purple","Crimson"},
+            Options = {
+                "Emerald","Cyan","Purple","Crimson","Ocean","Gold",
+                "Orange","Pink","Magenta","Lime","Teal","Rose",
+                "Indigo","Sky","Ruby","Mint","Lavender","Coral",
+                "Snow","Violet"
+            },
             Flag = "_Accent",
             Callback = function(v)
                 if PRESET_ACCENTS[v] then setAccent(PRESET_ACCENTS[v]) end
             end,
         })
-
-        -- применяем дефолтный масштаб 75% сразу
         winScale.Scale = 0.75
 
         --========================= ACTIONS =========================--
