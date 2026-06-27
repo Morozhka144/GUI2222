@@ -243,9 +243,6 @@ local function setAccent(color)
         local ok = pcall(fn, color)
         if not ok then table.remove(Library.AccentRepainters, i) end
     end
-    if Window and Window._activeTab and Window._activeTab._icon then
-        tween(Window._activeTab._icon, TW.Fast, { ImageColor3 = color })
-    end
 end
 
 --===================================================================================--
@@ -1038,6 +1035,11 @@ function Library:CreateWindow(cfg)
             tween(tabLabel, TW.Fast, { TextColor3 = Theme.Text })
         end
         tabBtn.MouseButton1Click:Connect(activate)
+        onAccentChange(function(col)
+            if page.Visible then
+                tween(tabIcon, TW.Fast, { ImageColor3 = col })
+            end
+        end)
         tabBtn.MouseEnter:Connect(function()
             if not page.Visible then tween(tabBtn, TW.Fast, { BackgroundTransparency = 0.93 }) end
         end)
