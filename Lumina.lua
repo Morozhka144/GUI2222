@@ -218,7 +218,7 @@ end
 local Library = {}
 Library.__index = Library
 Library.AccentObjects = {}   -- objects that follow accent color
-Library.Flags = {}           -- central state table
+Library.AccentRepainters = {} -- callbacks invoked on accent change
 Library.Flags = {}           -- central state table
 
 local function registerAccent(obj, prop)
