@@ -773,21 +773,6 @@ function Library:CreateWindow(cfg)
         registerAccent(fabStroke, "Color")
         registerAccent(fab, "TextColor3")
 
-        -- свечение вокруг кнопки (слабое, под кнопкой)
-        local fabGlow = create("ImageLabel", {
-            BackgroundTransparency = 1,
-            Image = "rbxassetid://6014261993",
-            ImageColor3 = Theme.Accent,
-            ImageTransparency = 0.85,
-            ScaleType = Enum.ScaleType.Slice,
-            SliceCenter = Rect.new(49,49,450,450),
-            Size = UDim2.new(1, 24, 1, 24),
-            Position = UDim2.new(0, -12, 0, -12),
-            ZIndex = 49,
-            Parent = fab,
-        })
-        registerAccent(fabGlow, "ImageColor3")
-
         fab.Visible = true
 
         fab.MouseEnter:Connect(function()
