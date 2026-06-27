@@ -22,6 +22,27 @@ local CoreGui           = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
 --===================================================================================--
+--                                   LUCIDE ICONS                                      --
+--===================================================================================--
+local Lucide
+do
+    -- ЗАМЕНИ на свою raw-ссылку с GitHub!
+    -- Важно: ссылка должна быть на RAW файл, не на страницу гитхаба.
+    -- Пример: https://raw.githubusercontent.com/USER/REPO/main/pack.luau
+    local LUCIDE_URL = "https://raw.githubusercontent.com/ТВОЙ_ЮЗЕР/ТВОЙ_РЕПО/main/pack.luau"
+
+    local ok, mod = pcall(function()
+        local src = game:HttpGet(LUCIDE_URL)
+        return loadstring(src)()
+    end)
+    if ok and mod then
+        Lucide = mod
+    else
+        warn("[MoroLumina] Lucide failed to load:", mod)
+    end
+end
+
+--===================================================================================--
 --                                   THEME                                             --
 --===================================================================================--
 local Theme = {
@@ -47,6 +68,51 @@ local PRESET_ACCENTS = {
     ["Purple"]  = Color3.fromRGB(170, 90, 255),
     ["Crimson"] = Color3.fromRGB(255, 60, 80),
 }
+
+--===================================================================================--
+--                                   ICON HELPER                                       --
+--===================================================================================--
+-- Разрешить иконку: имя lucide ("settings") ИЛИ готовый "rbxassetid://..."
+-- Возвращает: image(string?), rectSize(Vector2?), rectOffset(Vector2?)
+local function resolveIcon(name)
+    if not name or name == "" then return nil end
+    -- уже готовый ассет — отдаём как есть
+    if type(name) == "string" and (name:match("^rbxassetid://") or name:match("^rbxasset://") or name:match("^http")) then
+        return name, nil, nil
+    end
+    -- ищем в lucide
+    if Lucide then
+        local ok, asset = pcall(function()
+            return Lucide.GetAsset(tostring(name), 256)  -- 256px версия — чётче
+        end)
+        if ok and asset then
+            return asset.Url, asset.ImageRectSize, asset.ImageRectOffset
+        end
+    end
+    return nil
+end
+
+-- Применить иконку к ImageLabel по имени или id. Lucide — это спрайтшит,
+-- поэтому обязательно ставим ImageRectSize/ImageRectOffset.
+local function applyIcon(imageLabel, name)
+    local url, rectSize, rectOffset = resolveIcon(name)
+    if url then
+        imageLabel.Image = url
+        if rectSize and rectOffset then
+            imageLabel.ImageRectSize = rectSize
+            imageLabel.ImageRectOffset = rectOffset
+        else
+            -- обычный ассет (не спрайтшит) — сбрасываем rect
+            imageLabel.ImageRectSize = Vector2.new(0, 0)
+            imageLabel.ImageRectOffset = Vector2.new(0, 0)
+        end
+        imageLabel.Visible = true
+        return true
+    else
+        imageLabel.Image = ""
+        return false
+    end
+end
 
 --===================================================================================--
 --                                TWEEN PRESETS                                        --
@@ -420,7 +486,7 @@ function Library:CreateWindow(cfg)
         Parent = iconHolder,
     })
 
-    local function makeIconBtn(img, order, callback)
+    local function makeIconBtn(iconName, order, callback)
         local b = create("TextButton", {
             BackgroundColor3 = Theme.Element,
             BackgroundTransparency = 1,
@@ -430,12 +496,13 @@ function Library:CreateWindow(cfg)
         })
         corner(b, 8)
         local ic = create("ImageLabel", {
-            BackgroundTransparency = 1, Image = img,
+            BackgroundTransparency = 1,
             ImageColor3 = Theme.SubText,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
             Size = UDim2.fromOffset(18, 18), Parent = b,
         })
+        applyIcon(ic, iconName)
         b.MouseEnter:Connect(function()
             tween(b, TW.Fast, { BackgroundTransparency = 0 })
             tween(ic, TW.Fast, { ImageColor3 = Theme.Text })
@@ -449,10 +516,10 @@ function Library:CreateWindow(cfg)
         return b, ic
     end
 
-    makeIconBtn("rbxassetid://3926305904", 1) -- bell (notify)
-    makeIconBtn("rbxassetid://3926307971", 2) -- key
-    local gearBtn = makeIconBtn("rbxassetid://3926307971", 3) -- gear
-    makeIconBtn("rbxassetid://3926305904", 4) -- profile
+    makeIconBtn("bell", 1)
+    makeIconBtn("key", 2)
+    local gearBtn = makeIconBtn("settings", 3)
+    makeIconBtn("user", 4)
 
     --========================= BODY =========================--
     local body = create("Frame", {
@@ -868,13 +935,14 @@ function Library:CreateWindow(cfg)
 
         local tabIcon = create("ImageLabel", {
             BackgroundTransparency = 1,
-            Image = tabCfg.Icon or "rbxassetid://3926305904",
             ImageColor3 = Theme.SubText,
             AnchorPoint = Vector2.new(0.5, 0),
             Position = UDim2.new(0.5, 0, 0, 12),
             Size = UDim2.fromOffset(24, 24),
             Parent = tabBtn,
         })
+        applyIcon(tabIcon, tabCfg.Icon or "menu")
+    
         local tabLabel = create("TextLabel", {
             BackgroundTransparency = 1,
             AnchorPoint = Vector2.new(0.5, 1),
@@ -1016,14 +1084,15 @@ function Library:CreateWindow(cfg)
             -- label with optional icon + sublabel
             local function labelBlock(parent, text, icon, sub, widthOffset)
                 if icon then
-                    create("ImageLabel", {
-                        BackgroundTransparency = 1, Image = icon,
+                    local ic = create("ImageLabel", {
+                        BackgroundTransparency = 1,
                         ImageColor3 = Theme.SubText,
                         AnchorPoint = Vector2.new(0, 0.5),
                         Position = UDim2.new(0, 0, 0.5, 0),
                         Size = UDim2.fromOffset(16, 16),
                         Parent = parent,
                     })
+                    applyIcon(ic, icon)
                 end
                 local off = icon and 24 or 0
                 local lbl = create("TextLabel", {
@@ -1168,9 +1237,10 @@ function Library:CreateWindow(cfg)
                     TextXAlignment = Enum.TextXAlignment.Left, Parent = f,
                 })
                 if o.Icon then
-                    create("ImageLabel", { BackgroundTransparency = 1, Image = o.Icon,
+                    local ic = create("ImageLabel", { BackgroundTransparency = 1,
                         ImageColor3 = Theme.SubText, Position = UDim2.fromOffset(0, 2),
                         Size = UDim2.fromOffset(16,16), Parent = f })
+                    applyIcon(ic, o.Icon)
                 end
 
                 local track = create("Frame", {
@@ -1250,12 +1320,12 @@ function Library:CreateWindow(cfg)
                     Parent = boxSel,
                 })
                 local arrow = create("ImageLabel", {
-                    BackgroundTransparency = 1, Image = "rbxassetid://3926305904",
-                    ImageRectOffset = Vector2.new(364, 364), ImageRectSize = Vector2.new(36,36),
+                    BackgroundTransparency = 1,
                     ImageColor3 = Theme.SubText,
                     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0),
                     Size = UDim2.fromOffset(16,16), Parent = boxSel,
                 })
+                applyIcon(arrow, "chevron-down")
 
                 local listFrame = create("Frame", {
                     BackgroundColor3 = Theme.Bg,
@@ -1362,12 +1432,12 @@ function Library:CreateWindow(cfg)
                 })
 
                 local arrow = create("ImageLabel", {
-                    BackgroundTransparency = 1, Image = "rbxassetid://3926305904",
-                    ImageRectOffset = Vector2.new(364, 364), ImageRectSize = Vector2.new(36, 36),
+                    BackgroundTransparency = 1,
                     ImageColor3 = Theme.SubText,
                     AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0),
-                    Size = UDim2.fromOffset(16, 16), Parent = boxSel,
+                    Size = UDim2.fromOffset(16,16), Parent = boxSel,
                 })
+                applyIcon(arrow, "chevron-down")
 
                 -- count badge (e.g. "3")
                 local badge = create("Frame", {
@@ -1770,7 +1840,7 @@ function Library:CreateWindow(cfg)
     --===============================================================================--
     function Window:AddSettingsTab()
         local cfgDrop, autoLabel
-        local tab = Window:CreateTab({ Name = "Settings", Icon = "rbxassetid://3926307971" })
+        local tab = Window:CreateTab({ Name = "Settings", Icon = "settings" })
 
         --========================= INTERFACE =========================--
         local theme = tab:CreateSection({ Name = "Interface" })
