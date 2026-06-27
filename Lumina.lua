@@ -812,7 +812,8 @@ function Library:CreateWindow(cfg)
         BackgroundTransparency = 1,
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -16, 0, 16),
-        Size = UDim2.new(0, 280, 1, -32),
+        Size = UDim2.new(0, 280, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
         Parent = gui,
     })
     create("UIListLayout", {
@@ -839,60 +840,53 @@ function Library:CreateWindow(cfg)
 
         _notifyOrder = _notifyOrder + 1
 
+        -- карточка фиксированной высоты (НЕ AutomaticSize)
+        local hasContent = n.Content and n.Content ~= ""
+        local cardHeight = hasContent and 56 or 34
+
         local card = create("Frame", {
             BackgroundColor3 = Theme.Bg2,
-            Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
+            Size = UDim2.new(1, 0, 0, cardHeight),
             BackgroundTransparency = 1,
             LayoutOrder = _notifyOrder,
+            ClipsDescendants = true,
             Parent = notifyHolder,
         })
         corner(card, 10)
         stroke(card, Theme.StrokeLight, 1, 0.4)
         local cardScale = create("UIScale", { Scale = 0.8, Parent = card })
 
-        create("UIPadding", {
-            PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
-            PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 12),
-            Parent = card,
-        })
-        create("UIListLayout", {
-            FillDirection = Enum.FillDirection.Vertical,
-            SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 2),
-            Parent = card,
-        })
-
         -- accent-полоса слева
         create("Frame", {
             BackgroundColor3 = col, BorderSizePixel = 0,
-            Size = UDim2.new(0, 3, 1, -8), Position = UDim2.new(0, -10, 0, 4),
+            Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 0, 0, 6),
             ZIndex = 2, Parent = card,
         })
 
-        -- заголовок (фикс. высота, без растягивания)
+        -- заголовок
         create("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 16),
-            AutomaticSize = Enum.AutomaticSize.None,
+            Position = UDim2.fromOffset(14, hasContent and 8 or 0),
+            Size = UDim2.new(1, -22, 0, hasContent and 16 or cardHeight),
             Text = n.Title or "Notification",
             TextColor3 = col, Font = Theme.FontBold, TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
-            LayoutOrder = 1, Parent = card,
+            TextYAlignment = hasContent and Enum.TextYAlignment.Top or Enum.TextYAlignment.Center,
+            Parent = card,
         })
 
-        -- текст (перенос, растёт по высоте)
-        if n.Content and n.Content ~= "" then
+        -- текст (только если есть)
+        if hasContent then
             create("TextLabel", {
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 0),
-                AutomaticSize = Enum.AutomaticSize.Y,
+                Position = UDim2.fromOffset(14, 26),
+                Size = UDim2.new(1, -22, 0, 24),
                 Text = n.Content,
                 TextColor3 = Theme.SubText, Font = Theme.Font, TextSize = 12,
                 TextXAlignment = Enum.TextXAlignment.Left,
                 TextYAlignment = Enum.TextYAlignment.Top,
                 TextWrapped = true,
-                LayoutOrder = 2, Parent = card,
+                Parent = card,
             })
         end
 
