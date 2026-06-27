@@ -1294,24 +1294,24 @@ function Library:CreateWindow(cfg)
                 return { Set = setVal, Get = function() return val end }
             end
 
-            --=====================================================================--
+            =====================================================================--
             --                            DROPDOWN                                   --
             --=====================================================================--
             function Section:AddDropdown(o)
-                o = o or {}
-                local options = o.Options or {}
-                local selected = o.Default or options[1]
-                local open = false
-
-                -- высота увеличена: место под label сверху + кнопку снизу
-                local f = row(o.Sub and 80 or 72)
-                labelBlock(f, o.Name or "Dropdown", o.Icon, o.Sub, 9999)
-
+              o = o or {}
+              local options = o.Options or {}
+              local selected = o.Default or options[1]
+              local open = false
+    
+    
+                local f = row(o.Sub and 44 or 36)
+                labelBlock(f, o.Name or "Dropdown", o.Icon, o.Sub, 150)
+    
                 local boxSel = create("TextButton", {
                     BackgroundColor3 = Theme.Bg,
-                    AnchorPoint = Vector2.new(0, 1),
-                    Position = UDim2.new(0, 0, 1, -6),       -- прижата к низу строки
-                    Size = UDim2.new(1, 0, 0, 28),           -- на всю ширину
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(140, 28),
                     Text = "", AutoButtonColor = false, Parent = f,
                 })
                 corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
@@ -1330,16 +1330,16 @@ function Library:CreateWindow(cfg)
                     Size = UDim2.fromOffset(16,16), Parent = boxSel,
                 })
                 applyIcon(arrow, "chevron-down")
-
+    
                 local listFrame = create("Frame", {
                     BackgroundColor3 = Theme.Bg,
                     Size = UDim2.new(1, 0, 0, 0),
                     ClipsDescendants = true, Visible = false,
-                    LayoutOrder = nextOrder(), Parent = box,
+                    LayoutOrder = nextOrder(), Parent = box,   -- ← child секции, толкает остальные
                 })
                 corner(listFrame, 6); stroke(listFrame, Theme.StrokeLight, 1, 0.2)
                 local listLayout = create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = listFrame })
-
+    
                 local function rebuild()
                     for _, c in ipairs(listFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
                     for i, opt in ipairs(options) do
@@ -1367,7 +1367,7 @@ function Library:CreateWindow(cfg)
                     end
                 end
                 rebuild()
-
+    
                 boxSel.MouseButton1Click:Connect(function()
                     open = not open
                     if open then
@@ -1381,7 +1381,7 @@ function Library:CreateWindow(cfg)
                         task.delay(0.15, function() if not open then listFrame.Visible = false end end)
                     end
                 end)
-
+    
                 local api = {}
                 function api.Set(v) selected = v; selLbl.Text = tostring(v); rebuild(); if o.Callback then task.spawn(o.Callback, v) end end
                 function api.Get() return selected end
@@ -1393,8 +1393,8 @@ function Library:CreateWindow(cfg)
                 bindFlag(o.Flag, api.Get, api.Set)
                 return api
             end
-
-
+    
+    
             --=====================================================================--
             --                       MULTI DROPDOWN                                  --
             --=====================================================================--
@@ -1405,25 +1405,26 @@ function Library:CreateWindow(cfg)
                 local order    = {}                       -- preserve selection order
                 local maxSel   = o.Max or math.huge       -- limit selections
                 local open     = false
-
+    
                 -- init defaults
                 for _, d in ipairs(o.Default or {}) do
                     selected[d] = true
                     table.insert(order, d)
                 end
-
-                local f = row(o.Sub and 80 or 72)
-                labelBlock(f, o.Name or "Multi", o.Icon, o.Sub, 9999)
-
+    
+                local f = row(o.Sub and 44 or 36)
+                labelBlock(f, o.Name or "Multi", o.Icon, o.Sub, 150)
+    
+                -- selection display button
                 local boxSel = create("TextButton", {
                     BackgroundColor3 = Theme.Bg,
-                    AnchorPoint = Vector2.new(0, 1),
-                    Position = UDim2.new(0, 0, 1, -6),
-                    Size = UDim2.new(1, 0, 0, 28),
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(140, 28),
                     Text = "", AutoButtonColor = false, Parent = f,
                 })
                 corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
-
+    
                 local selLbl = create("TextLabel", {
                     BackgroundTransparency = 1,
                     Position = UDim2.fromOffset(8, 0),
@@ -1433,7 +1434,7 @@ function Library:CreateWindow(cfg)
                     TextTruncate = Enum.TextTruncate.AtEnd,
                     Parent = boxSel,
                 })
-
+    
                 local arrow = create("ImageLabel", {
                     BackgroundTransparency = 1,
                     ImageColor3 = Theme.SubText,
@@ -1441,7 +1442,7 @@ function Library:CreateWindow(cfg)
                     Size = UDim2.fromOffset(16,16), Parent = boxSel,
                 })
                 applyIcon(arrow, "chevron-down")
-
+    
                 -- count badge (e.g. "3")
                 local badge = create("Frame", {
                     BackgroundColor3 = Theme.Accent,
@@ -1457,7 +1458,7 @@ function Library:CreateWindow(cfg)
                     Text = "0", TextColor3 = Theme.Bg, Font = Theme.FontBold, TextSize = 11,
                     Parent = badge,
                 })
-
+    
                 -- expandable list container
                 local listFrame = create("Frame", {
                     BackgroundColor3 = Theme.Bg,
@@ -1467,7 +1468,7 @@ function Library:CreateWindow(cfg)
                     LayoutOrder = nextOrder(), Parent = box,
                 })
                 corner(listFrame, 8); stroke(listFrame, Theme.StrokeLight, 1, 0.2)
-
+    
                 local scroll = create("ScrollingFrame", {
                     BackgroundTransparency = 1, Size = UDim2.new(1, 0, 1, 0),
                     ScrollBarThickness = 3, ScrollBarImageColor3 = Theme.StrokeLight,
@@ -1476,7 +1477,7 @@ function Library:CreateWindow(cfg)
                 })
                 padding(scroll, nil, 6, 6, 6, 6)
                 create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
-
+    
                 -- update top button label + badge
                 local function updateDisplay()
                     local n = #order
@@ -1492,13 +1493,13 @@ function Library:CreateWindow(cfg)
                         selLbl.Text = table.concat(order, ", ")
                     end
                 end
-
-                local rowRefs = {}  -- option -> {btn, check, lbl}
-
+    
+                local rowRefs = {}
+    
                 local function setOption(opt, state, fire)
                     local ref = rowRefs[opt]
                     if state and not selected[opt] then
-                        if #order >= maxSel then return end  -- limit reached
+                        if #order >= maxSel then return end
                         selected[opt] = true
                         table.insert(order, opt)
                     elseif (not state) and selected[opt] then
@@ -1518,7 +1519,7 @@ function Library:CreateWindow(cfg)
                         task.spawn(o.Callback, table.clone(order), opt, state)
                     end
                 end
-
+    
                 local function rebuild()
                     rowRefs = {}
                     for _, c in ipairs(scroll:GetChildren()) do
@@ -1533,7 +1534,7 @@ function Library:CreateWindow(cfg)
                             LayoutOrder = i, Parent = scroll,
                         })
                         corner(ob, 6)
-
+    
                         -- checkbox
                         local check = create("Frame", {
                             BackgroundColor3 = selected[opt] and Theme.Accent or Theme.Element,
@@ -1551,7 +1552,7 @@ function Library:CreateWindow(cfg)
                             Size = UDim2.fromOffset(14, 14),
                             Visible = selected[opt] == true, Parent = check,
                         })
-
+    
                         local lbl = create("TextLabel", {
                             BackgroundTransparency = 1,
                             Position = UDim2.fromOffset(32, 0),
@@ -1561,9 +1562,9 @@ function Library:CreateWindow(cfg)
                             Font = Theme.Font, TextSize = 13,
                             TextXAlignment = Enum.TextXAlignment.Left, Parent = ob,
                         })
-
+    
                         rowRefs[opt] = { btn = ob, check = check, tick = tick, lbl = lbl }
-
+    
                         ob.MouseEnter:Connect(function() tween(ob, TW.Fast, { BackgroundTransparency = 0.2 }) end)
                         ob.MouseLeave:Connect(function() tween(ob, TW.Fast, { BackgroundTransparency = 0.5 }) end)
                         ob.MouseButton1Click:Connect(function()
@@ -1573,7 +1574,7 @@ function Library:CreateWindow(cfg)
                     updateDisplay()
                 end
                 rebuild()
-
+    
                 boxSel.MouseButton1Click:Connect(function()
                     open = not open
                     if open then
@@ -1587,7 +1588,7 @@ function Library:CreateWindow(cfg)
                         task.delay(0.2, function() if not open then listFrame.Visible = false end end)
                     end
                 end)
-
+    
                 -- public API
                 local api = {}
                 function api.Get() return table.clone(order) end
@@ -1622,11 +1623,12 @@ function Library:CreateWindow(cfg)
                     end
                     rebuild()
                 end
-
+    
                 -- config flag: store/restore the list of selected options
                 bindFlag(o.Flag, api.Get, api.Set)
                 return api
             end
+
 
             --=====================================================================--
             --                            TEXTBOX                                    --
@@ -1640,7 +1642,7 @@ function Library:CreateWindow(cfg)
                     BackgroundColor3 = Theme.Bg,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(140, 28), Parent = f,
+                    Size = UDim2.fromOffset(70, 28), Parent = f,
                 })
                 corner(boxBg, 6); local bs = stroke(boxBg, Theme.StrokeLight, 1, 0.2)
                 padding(boxBg, nil, 0, 0, 8, 8)
