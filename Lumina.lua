@@ -221,6 +221,9 @@ local function setAccent(color)
             tween(data.obj, TW.Fast, { [data.prop] = color })
         end
     end
+    if Window and Window._activeTab and Window._activeTab._icon then
+        tween(Window._activeTab._icon, TW.Fast, { ImageColor3 = color })
+    end
 end
 
 --===================================================================================--
@@ -449,11 +452,12 @@ function Library:CreateWindow(cfg)
     -- logo
     local logo = create("ImageLabel", {
         BackgroundTransparency = 1,
-        Image = "rbxassetid://7733955511",
         Size = UDim2.fromOffset(26, 26),
         Position = UDim2.fromOffset(16, 14),
+        ImageColor3 = Theme.Accent,
         Parent = topbar,
     })
+    applyIcon(logo, "crown")
     registerAccent(logo, "ImageColor3")
 
     create("TextLabel", {
@@ -929,6 +933,7 @@ function Library:CreateWindow(cfg)
         })
         corner(tabBtn, 12)
         local tabStroke = stroke(tabBtn, Theme.Accent, 1.2, 1)
+        registerAccent(tabStroke, "Color")
 
         local tabIcon = create("ImageLabel", {
             BackgroundTransparency = 1,
@@ -1001,6 +1006,7 @@ function Library:CreateWindow(cfg)
 
         -- tab activation
         local function activate()
+        Window._activeTab = Tab
             for _, t in ipairs(Window._tabs) do
                 t._page.Visible = false
                 tween(t._btn, TW.Fast, { BackgroundTransparency = 1 })
@@ -1297,14 +1303,15 @@ function Library:CreateWindow(cfg)
                 local selected = o.Default or options[1]
                 local open = false
 
-                local f = row(o.Sub and 44 or 36)
-                labelBlock(f, o.Name or "Dropdown", o.Icon, o.Sub, 150)
+                -- высота увеличена: место под label сверху + кнопку снизу
+                local f = row(o.Sub and 80 or 72)
+                labelBlock(f, o.Name or "Dropdown", o.Icon, o.Sub, 9999)
 
                 local boxSel = create("TextButton", {
                     BackgroundColor3 = Theme.Bg,
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(140, 28),
+                    AnchorPoint = Vector2.new(0, 1),
+                    Position = UDim2.new(0, 0, 1, -6),       -- прижата к низу строки
+                    Size = UDim2.new(1, 0, 0, 28),           -- на всю ширину
                     Text = "", AutoButtonColor = false, Parent = f,
                 })
                 corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
@@ -1328,7 +1335,7 @@ function Library:CreateWindow(cfg)
                     BackgroundColor3 = Theme.Bg,
                     Size = UDim2.new(1, 0, 0, 0),
                     ClipsDescendants = true, Visible = false,
-                    LayoutOrder = nextOrder(), Parent = box,   -- ← child секции, толкает остальные
+                    LayoutOrder = nextOrder(), Parent = box,
                 })
                 corner(listFrame, 6); stroke(listFrame, Theme.StrokeLight, 1, 0.2)
                 local listLayout = create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = listFrame })
@@ -1405,15 +1412,14 @@ function Library:CreateWindow(cfg)
                     table.insert(order, d)
                 end
 
-                local f = row(o.Sub and 44 or 36)
-                labelBlock(f, o.Name or "Multi", o.Icon, o.Sub, 150)
+                local f = row(o.Sub and 80 or 72)
+                labelBlock(f, o.Name or "Multi", o.Icon, o.Sub, 9999)
 
-                -- selection display button
                 local boxSel = create("TextButton", {
                     BackgroundColor3 = Theme.Bg,
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(140, 28),
+                    AnchorPoint = Vector2.new(0, 1),
+                    Position = UDim2.new(0, 0, 1, -6),
+                    Size = UDim2.new(1, 0, 0, 28),
                     Text = "", AutoButtonColor = false, Parent = f,
                 })
                 corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
