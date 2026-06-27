@@ -1310,7 +1310,7 @@ function Library:CreateWindow(cfg)
                     BackgroundColor3 = Theme.Bg,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(140, 28),
+                    Size = UDim2.fromOffset(90, 28),
                     Text = "", AutoButtonColor = false, Parent = f,
                 })
                 corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
@@ -1419,7 +1419,7 @@ function Library:CreateWindow(cfg)
                     BackgroundColor3 = Theme.Bg,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(140, 28),
+                    Size = UDim2.fromOffset(90, 28),
                     Text = "", AutoButtonColor = false, Parent = f,
                 })
                 corner(boxSel, 6); stroke(boxSel, Theme.StrokeLight, 1, 0.2)
