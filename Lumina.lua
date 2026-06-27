@@ -103,8 +103,6 @@ local function resolveIcon(name)
     return nil
 end
 
--- Применить иконку к ImageLabel по имени или id. Lucide — это спрайтшит,
--- поэтому обязательно ставим ImageRectSize/ImageRectOffset.
 local function applyIcon(imageLabel, name)
     local url, rectSize, rectOffset = resolveIcon(name)
     if url then
@@ -113,7 +111,6 @@ local function applyIcon(imageLabel, name)
             imageLabel.ImageRectSize = rectSize
             imageLabel.ImageRectOffset = rectOffset
         else
-            -- обычный ассет (не спрайтшит) — сбрасываем rect
             imageLabel.ImageRectSize = Vector2.new(0, 0)
             imageLabel.ImageRectOffset = Vector2.new(0, 0)
         end
@@ -1307,15 +1304,14 @@ function Library:CreateWindow(cfg)
             --                            DROPDOWN                                 --
             --=====================================================================--
             function Section:AddDropdown(o)
-              o = o or {}
-              local options = o.Options or {}
-              local selected = o.Default or options[1]
-              local open = false
-    
-    
+                o = o or {}
+                local options = o.Options or {}
+                local selected = o.Default or options[1]
+                local open = false
+
                 local f = row(o.Sub and 44 or 36)
                 labelBlock(f, o.Name or "Dropdown", o.Icon, o.Sub, 150)
-    
+
                 local boxSel = create("TextButton", {
                     BackgroundColor3 = Theme.Bg,
                     AnchorPoint = Vector2.new(1, 0.5),
@@ -1339,18 +1335,30 @@ function Library:CreateWindow(cfg)
                     Size = UDim2.fromOffset(16,16), Parent = boxSel,
                 })
                 applyIcon(arrow, "chevron-down")
-    
+
+                -- контейнер-обёртка (он толкает остальные элементы секции)
                 local listFrame = create("Frame", {
                     BackgroundColor3 = Theme.Bg,
                     Size = UDim2.new(1, 0, 0, 0),
                     ClipsDescendants = true, Visible = false,
-                    LayoutOrder = nextOrder(), Parent = box,   -- ← child секции, толкает остальные
+                    LayoutOrder = nextOrder(), Parent = box,
                 })
                 corner(listFrame, 6); stroke(listFrame, Theme.StrokeLight, 1, 0.2)
-                local listLayout = create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = listFrame })
-    
+
+                -- ВНУТРИ — прокручиваемая область
+                local scroll = create("ScrollingFrame", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    ScrollBarThickness = 3,
+                    ScrollBarImageColor3 = Theme.StrokeLight,
+                    CanvasSize = UDim2.new(0,0,0,0),
+                    AutomaticCanvasSize = Enum.AutomaticSize.Y,
+                    Parent = listFrame,
+                })
+                create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
+
                 local function rebuild()
-                    for _, c in ipairs(listFrame:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+                    for _, c in ipairs(scroll:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
                     for i, opt in ipairs(options) do
                         local ob = create("TextButton", {
                             BackgroundColor3 = Theme.Bg, BackgroundTransparency = 1,
@@ -1358,13 +1366,13 @@ function Library:CreateWindow(cfg)
                             TextColor3 = (opt == selected) and Theme.Accent or Theme.Text,
                             Font = Theme.Font, TextSize = 13, AutoButtonColor = false,
                             TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 51,
-                            LayoutOrder = i, Parent = listFrame,
+                            LayoutOrder = i, Parent = scroll,
                         })
                         ob.MouseEnter:Connect(function() tween(ob, TW.Fast, { BackgroundTransparency = 0.6 }) end)
                         ob.MouseLeave:Connect(function() tween(ob, TW.Fast, { BackgroundTransparency = 1 }) end)
                         ob.MouseButton1Click:Connect(function()
                             selected = opt; selLbl.Text = tostring(opt)
-                            for _, c in ipairs(listFrame:GetChildren()) do
+                            for _, c in ipairs(scroll:GetChildren()) do
                                 if c:IsA("TextButton") then c.TextColor3 = (c.Text == "  "..tostring(opt)) and Theme.Accent or Theme.Text end
                             end
                             open = false
@@ -1376,12 +1384,12 @@ function Library:CreateWindow(cfg)
                     end
                 end
                 rebuild()
-    
+
                 boxSel.MouseButton1Click:Connect(function()
                     open = not open
                     if open then
                         listFrame.Visible = true
-                        local h = math.min(#options * 26, 160)
+                        local h = math.min(#options * 26, 160)   -- макс 160px, дальше скролл
                         tween(arrow, TW.Fast, { Rotation = 180 })
                         tween(listFrame, TW.Normal, { Size = UDim2.new(1, 0, 0, h) })
                     else
@@ -1390,7 +1398,7 @@ function Library:CreateWindow(cfg)
                         task.delay(0.15, function() if not open then listFrame.Visible = false end end)
                     end
                 end)
-    
+
                 local api = {}
                 function api.Set(v) selected = v; selLbl.Text = tostring(v); rebuild(); if o.Callback then task.spawn(o.Callback, v) end end
                 function api.Get() return selected end
