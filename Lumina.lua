@@ -1906,7 +1906,6 @@ function Library:CreateWindow(cfg)
                 if PRESET_ACCENTS[v] then setAccent(PRESET_ACCENTS[v]) end
             end,
         })
-        winScale.Scale = 0.75
 
         --========================= ACTIONS =========================--
         local actions = tab:CreateSection({ Name = "Actions" })
