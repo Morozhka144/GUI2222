@@ -1294,8 +1294,8 @@ function Library:CreateWindow(cfg)
                 return { Set = setVal, Get = function() return val end }
             end
 
-            =====================================================================--
-            --                            DROPDOWN                                   --
+            --=====================================================================--
+            --                            DROPDOWN                                 --
             --=====================================================================--
             function Section:AddDropdown(o)
               o = o or {}
