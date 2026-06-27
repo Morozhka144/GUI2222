@@ -747,7 +747,7 @@ function Library:CreateWindow(cfg)
             ZIndex = 50,
             Parent = Window.Gui,
         })
-        corner(fab, 8)                              -- скруглённый прямоугольник как меню
+        corner(fab, 8)
         local fabStroke = stroke(fab, Theme.Accent, 1.5, 0)   -- зелёная обводка
         registerAccent(fabStroke, "Color")
         registerAccent(fab, "TextColor3")
@@ -767,7 +767,6 @@ function Library:CreateWindow(cfg)
         })
         registerAccent(fabGlow, "ImageColor3")
 
-        -- показываем на всех устройствах (убери условие если хочешь только моб.)
         fab.Visible = true
 
         fab.MouseEnter:Connect(function()
@@ -807,17 +806,17 @@ function Library:CreateWindow(cfg)
     end
 
     --===============================================================================--
-    --                              NOTIFICATIONS                                      --
+    --                              NOTIFICATIONS                                    --
     --===============================================================================--
     local notifyHolder = create("Frame", {
         BackgroundTransparency = 1,
-        AnchorPoint = Vector2.new(1, 1),
-        Position = UDim2.new(1, -16, 1, -16),
-        Size = UDim2.new(0, 300, 1, -32),
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -16, 0, 16),
+        Size = UDim2.new(0, 280, 1, -32),
         Parent = gui,
     })
     create("UIListLayout", {
-        VerticalAlignment = Enum.VerticalAlignment.Bottom,
+        VerticalAlignment = Enum.VerticalAlignment.Top,
         HorizontalAlignment = Enum.HorizontalAlignment.Right,
         Padding = UDim.new(0, 8),
         SortOrder = Enum.SortOrder.LayoutOrder,
@@ -830,41 +829,37 @@ function Library:CreateWindow(cfg)
         Warning = Color3.fromRGB(255, 180, 40),
         Error   = Color3.fromRGB(255, 70, 80),
     }
-    local NOTIFY_ICONS = {
-        Info    = "rbxassetid://3926305904",
-        Success = "rbxassetid://3926305904",
-        Warning = "rbxassetid://3926305904",
-        Error   = "rbxassetid://3926305904",
-    }
+
+    local _notifyOrder = 0
 
     function Window:Notify(n)
         n = n or {}
         local col = NOTIFY_COLORS[n.Type] or Theme.Accent
         local dur = n.Duration or 4
 
+        _notifyOrder = _notifyOrder + 1
+
         local card = create("Frame", {
             BackgroundColor3 = Theme.Bg2,
             Size = UDim2.new(1, 0, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             BackgroundTransparency = 1,
+            LayoutOrder = _notifyOrder,
             Parent = notifyHolder,
         })
         corner(card, 10)
         stroke(card, Theme.StrokeLight, 1, 0.4)
         local cardScale = create("UIScale", { Scale = 0.8, Parent = card })
 
-        -- внутренние отступы
         create("UIPadding", {
-            PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10),
+            PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8),
             PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 12),
             Parent = card,
         })
-
-        -- вертикальный layout внутри карточки
         create("UIListLayout", {
             FillDirection = Enum.FillDirection.Vertical,
             SortOrder = Enum.SortOrder.LayoutOrder,
-            Padding = UDim.new(0, 4),
+            Padding = UDim.new(0, 2),
             Parent = card,
         })
 
@@ -875,27 +870,31 @@ function Library:CreateWindow(cfg)
             ZIndex = 2, Parent = card,
         })
 
+        -- заголовок (фикс. высота, без растягивания)
         create("TextLabel", {
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 18),
+            Size = UDim2.new(1, 0, 0, 16),
             AutomaticSize = Enum.AutomaticSize.None,
             Text = n.Title or "Notification",
-            TextColor3 = col, Font = Theme.FontBold, TextSize = 14,
+            TextColor3 = col, Font = Theme.FontBold, TextSize = 13,
             TextXAlignment = Enum.TextXAlignment.Left,
             LayoutOrder = 1, Parent = card,
         })
 
-        create("TextLabel", {
-            BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
-            Text = n.Content or "",
-            TextColor3 = Theme.SubText, Font = Theme.Font, TextSize = 13,
-            TextXAlignment = Enum.TextXAlignment.Left,
-            TextYAlignment = Enum.TextYAlignment.Top,
-            TextWrapped = true,
-            LayoutOrder = 2, Parent = card,
-        })
+        -- текст (перенос, растёт по высоте)
+        if n.Content and n.Content ~= "" then
+            create("TextLabel", {
+                BackgroundTransparency = 1,
+                Size = UDim2.new(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                Text = n.Content,
+                TextColor3 = Theme.SubText, Font = Theme.Font, TextSize = 12,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                TextWrapped = true,
+                LayoutOrder = 2, Parent = card,
+            })
+        end
 
         tween(card, TW.Normal, { BackgroundTransparency = 0 })
         tween(cardScale, TW.Spring, { Scale = 1 })
