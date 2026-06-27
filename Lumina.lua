@@ -219,10 +219,15 @@ local Library = {}
 Library.__index = Library
 Library.AccentObjects = {}   -- objects that follow accent color
 Library.Flags = {}           -- central state table
+Library.Flags = {}           -- central state table
 
 local function registerAccent(obj, prop)
     table.insert(Library.AccentObjects, { obj = obj, prop = prop })
     obj[prop] = Theme.Accent
+end
+
+local function onAccentChange(fn)
+    table.insert(Library.AccentRepainters, fn)
 end
 
 local function setAccent(color)
@@ -231,6 +236,12 @@ local function setAccent(color)
         if data.obj and data.obj.Parent then
             tween(data.obj, TW.Fast, { [data.prop] = color })
         end
+    end
+    -- вызываем кастомные перекраски (дропдауны, мульти-дропдауны)
+    for i = #Library.AccentRepainters, 1, -1 do
+        local fn = Library.AccentRepainters[i]
+        local ok = pcall(fn, color)
+        if not ok then table.remove(Library.AccentRepainters, i) end
     end
     if Window and Window._activeTab and Window._activeTab._icon then
         tween(Window._activeTab._icon, TW.Fast, { ImageColor3 = color })
@@ -1384,6 +1395,15 @@ function Library:CreateWindow(cfg)
                     end
                 end
                 rebuild()
+        
+                -- обновлять цвет выделенного пункта при смене акцента
+                onAccentChange(function(col)
+                    for _, c in ipairs(scroll:GetChildren()) do
+                        if c:IsA("TextButton") then
+                            c.TextColor3 = (c.Text == "  "..tostring(selected)) and col or Theme.Text
+                        end
+                    end
+                end)
 
                 boxSel.MouseButton1Click:Connect(function()
                     open = not open
@@ -1591,6 +1611,15 @@ function Library:CreateWindow(cfg)
                     updateDisplay()
                 end
                 rebuild()
+
+                -- обновлять цвета чекбоксов/текста при смене акцента
+                onAccentChange(function(col)
+                    for opt, ref in pairs(rowRefs) do
+                        if selected[opt] then
+                            ref.check.BackgroundColor3 = col
+                        end
+                    end
+                end)
     
                 boxSel.MouseButton1Click:Connect(function()
                     open = not open
