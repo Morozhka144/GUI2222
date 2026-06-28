@@ -377,6 +377,12 @@ function Library:CreateWindow(cfg)
     })
     corner(canvas, 14)
     local winScale = create("UIScale", { Scale = 1, Parent = canvas })
+    local userScale = 1
+    Window._setUserScale = function(s)
+        userScale = s
+        winScale.Scale = s
+    end
+    Window._getUserScale = function() return userScale end
 
     -- Контейнер для эффектов позади окна (НЕ внутри CanvasGroup!)
     local fxHolder = create("Frame", {
@@ -731,11 +737,12 @@ function Library:CreateWindow(cfg)
         local borderStroke = borderFrame:FindFirstChildOfClass("UIStroke")
 
         if isOpen then
-            if Window._setPulse then Window._setPulse(true) end   -- ← включаем пульсацию
+            if Window._setPulse then Window._setPulse(true) end
             canvas.Visible = true
             fxHolder.Visible = true
-            winScale.Scale = 0.95
-            tween(winScale, TW.Slow, { Scale = 1 })
+            -- стартуем чуть меньше пользовательского масштаба и анимируем до него
+            winScale.Scale = userScale * 0.95
+            tween(winScale, TW.Slow, { Scale = userScale })
             tween(canvas, TW.Normal, { GroupTransparency = 0 })
             for _, ch in ipairs(fxHolder:GetChildren()) do
                 if ch:IsA("ImageLabel") then
@@ -744,8 +751,8 @@ function Library:CreateWindow(cfg)
             end
             if borderStroke then tween(borderStroke, TW.Normal, { Transparency = 0 }) end
         else
-            if Window._setPulse then Window._setPulse(false) end  -- ← ВЫКЛЮЧАЕМ пульсацию
-            tween(winScale, TW.Normal, { Scale = 0.95 })
+            if Window._setPulse then Window._setPulse(false) end
+            tween(winScale, TW.Normal, { Scale = userScale * 0.95 })
             for _, ch in ipairs(fxHolder:GetChildren()) do
                 if ch:IsA("ImageLabel") then
                     tween(ch, TW.Normal, { ImageTransparency = 1 })
@@ -761,11 +768,6 @@ function Library:CreateWindow(cfg)
             end)
         end
     end
-    Window._toggleKey = cfg.ToggleKey or Enum.KeyCode.RightShift
-    UserInputService.InputBegan:Connect(function(i, gpe)
-        if gpe then return end
-        if i.KeyCode == Window._toggleKey then Window:Toggle() end
-    end)
 
     --========================= MOBILE FLOAT BUTTON =========================--
     do
@@ -1905,7 +1907,7 @@ function Library:CreateWindow(cfg)
             Flag = "_UIScale",
             Callback = function(v)
                 local num = tonumber((tostring(v):gsub("%%", ""))) or 75
-                winScale.Scale = num / 100
+                Window._setUserScale(num / 100)
             end,
         })
 
@@ -2074,9 +2076,9 @@ function Library:CreateWindow(cfg)
     end)
 
     -- entrance animation
-    winScale.Scale = 0.9
+    winScale.Scale = userScale * 0.9
     canvas.GroupTransparency = 1
-    tween(winScale, TW.Slow, { Scale = 1 })
+    tween(winScale, TW.Slow, { Scale = userScale })
     tween(canvas, TW.Normal, { GroupTransparency = 0 })
 
     return Window
