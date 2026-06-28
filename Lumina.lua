@@ -857,18 +857,18 @@ function Library:CreateWindow(cfg)
         Parent = notifyHolder,
     })
 
-    local NOTIFY_COLORS = {
-        Info    = Theme.Accent,
-        Success = Color3.fromRGB(0, 225, 134),
-        Warning = Color3.fromRGB(255, 180, 40),
-        Error   = Color3.fromRGB(255, 70, 80),
-    }
+    local function notifyColor(typ)
+        if typ == "Success" then return Color3.fromRGB(0, 225, 134) end
+        if typ == "Warning" then return Color3.fromRGB(255, 180, 40) end
+        if typ == "Error"   then return Color3.fromRGB(255, 70, 80)  end
+        return Theme.Accent
+    end
 
     local _notifyOrder = 0
 
     function Window:Notify(n)
         n = n or {}
-        local col = NOTIFY_COLORS[n.Type] or Theme.Accent
+        local col = notifyColor(n.Type)
         local dur = n.Duration or 4
 
         _notifyOrder = _notifyOrder + 1
