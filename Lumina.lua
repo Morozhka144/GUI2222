@@ -582,6 +582,26 @@ function Library:CreateWindow(cfg)
     })
     padding(pagesHolder, nil, 8, 12, 4, 12)
 
+    --========================= CLAMP TO SCREEN =========================--
+    local function clampToScreen()
+        local cam = workspace.CurrentCamera
+        local screen = cam and cam.ViewportSize or Vector2.new(1920, 1080)
+        local as = canvas.AbsoluteSize           -- уже с учётом UIScale
+        local ap = canvas.AbsolutePosition       -- верхний-левый угол на экране
+
+        -- насколько надо сдвинуть, чтобы окно влезло
+        local shiftX, shiftY = 0, 0
+        if ap.X < 0 then shiftX = -ap.X
+        elseif ap.X + as.X > screen.X then shiftX = screen.X - (ap.X + as.X) end
+        if ap.Y < 0 then shiftY = -ap.Y
+        elseif ap.Y + as.Y > screen.Y then shiftY = screen.Y - (ap.Y + as.Y) end
+
+        if shiftX ~= 0 or shiftY ~= 0 then
+            local p = canvas.Position
+            canvas.Position = UDim2.new(p.X.Scale, p.X.Offset + shiftX, p.Y.Scale, p.Y.Offset + shiftY)
+        end
+    end
+
     --========================= DRAGGING =========================--
     do
         local dragging, dragStart, startPos
@@ -594,6 +614,7 @@ function Library:CreateWindow(cfg)
             if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
                 local d = i.Position - dragStart
                 canvas.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
+                clampToScreen()
             end
         end)
         UserInputService.InputEnded:Connect(function(i)
@@ -611,13 +632,13 @@ function Library:CreateWindow(cfg)
 
         local resizing = false
         local resStart, startSize, startPos
-        local dirX, dirY = 0, 0   -- -1 = лево/верх, 1 = право/низ, 0 = нет
+        local dirX, dirY = 0, 0
 
         -- определяем, за какой край/угол схватили (по позиции мыши относительно canvas)
         local function getEdge(px, py)
             local ap = canvas.AbsolutePosition
             local as = canvas.AbsoluteSize
-            local e = EDGE * winScale.Scale     -- ← масштабируем зону захвата
+            local e = EDGE * winScale.Scale
             local lx = px - ap.X
             local ly = py - ap.Y
             local dx, dy = 0, 0
@@ -676,6 +697,7 @@ function Library:CreateWindow(cfg)
 
                 canvas.Size = UDim2.new(startPos.X.Scale, newW, startPos.Y.Scale, newH)
                 canvas.Position = UDim2.new(startPos.X.Scale, newPX, startPos.Y.Scale, newPY)
+                clampToScreen()
             end
         end)
 
