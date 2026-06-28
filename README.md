@@ -50,7 +50,7 @@ Window:AddSettingsTab()
 ## 📦 Загрузка
 
 ```lua
-local Library = loadstring(game:HttpGet("ССЫЛКА_НА_СКРИПТ"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/Lumina.lua)"))()
 ```
 
 ---
