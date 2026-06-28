@@ -543,10 +543,21 @@ function Library:CreateWindow(cfg)
         return b, ic
     end
 
-    makeIconBtn("bell", 1)
-    makeIconBtn("key", 2)
-    local gearBtn = makeIconBtn("settings", 3)
-    makeIconBtn("user", 4)
+    -- сохраняем кнопки, чтобы можно было назначить им действия снаружи
+    Window._topButtons = {}
+    Window._topButtons.bell     = makeIconBtn("bell", 1)
+    Window._topButtons.key      = makeIconBtn("key", 2)
+    local gearBtn               = makeIconBtn("settings", 3)
+    Window._topButtons.settings = gearBtn
+    Window._topButtons.user     = makeIconBtn("user", 4)
+
+    -- API для назначения действий кнопкам топбара
+    function Window:SetTopButton(name, callback)
+        local b = Window._topButtons[name]
+        if b and callback then
+            b.MouseButton1Click:Connect(callback)
+        end
+    end
 
     --========================= BODY =========================--
     local body = create("Frame", {
