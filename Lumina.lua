@@ -405,7 +405,7 @@ function Library:CreateWindow(cfg)
         Parent = fxHolder,
     })
     corner(borderFrame, 14)
-    stroke(borderFrame, Theme.Stroke, 1.5, 0)
+    stroke(borderFrame, Theme.Stroke, 1.5, 1)
 
     -- держим fxHolder под canvas по позиции/размеру
     local function syncFX()
