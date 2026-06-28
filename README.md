@@ -26,9 +26,9 @@
 ## 🚀 Быстрый старт
 
 ```lua
-local Library = loadstring(game:HttpGet("ССЫЛКА_НА_СКРИПТ"))()
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/Lumina.lua"))()
 
-local Window = Library:CreateWindow({ Title = "MyHub.lua" })
+local Window = Library:CreateWindow({ Title = "MyHub" })
 
 local Main = Window:CreateTab({ Name = "Main", Icon = "home" })
 local Section = Main:CreateSection({ Name = "Combat" })
