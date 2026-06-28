@@ -23,30 +23,6 @@
 
 ---
 
-## 🚀 Быстрый старт
-
-```lua
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/Lumina.lua"))()
-
-local Window = Library:CreateWindow({ Title = "MyHub" })
-
-local Main = Window:CreateTab({ Name = "Main", Icon = "home" })
-local Section = Main:CreateSection({ Name = "Combat" })
-
-Section:AddToggle({
-    Name = "Aimbot",
-    Default = false,
-    Flag = "Aimbot",
-    Callback = function(value)
-        print("Aimbot:", value)
-    end,
-})
-
-Window:AddSettingsTab()
-```
-
----
-
 ## 📦 Загрузка
 
 ```lua
