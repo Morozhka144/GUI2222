@@ -4,9 +4,6 @@
 
 **Современная, лёгкая и красивая UI-библиотека для Roblox**
 
-[![Roblox](https://img.shields.io/badge/Roblox-Lua-blue?style=for-the-badge&logo=robloxstudio)](https://www.roblox.com/)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
-
 </div>
 
 ---
