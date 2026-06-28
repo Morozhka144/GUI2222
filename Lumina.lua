@@ -582,50 +582,21 @@ function Library:CreateWindow(cfg)
     })
     padding(pagesHolder, nil, 8, 12, 4, 12)
 
-    --========================= CLAMP TO SCREEN =========================--
-    local function clampToScreen()
-        local cam = workspace.CurrentCamera
-        local screen = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-        local as = canvas.AbsoluteSize           -- уже с учётом UIScale
-        local ap = canvas.AbsolutePosition       -- верхний-левый угол на экране
-
-        -- насколько надо сдвинуть, чтобы окно влезло
-        local shiftX, shiftY = 0, 0
-        if ap.X < 0 then shiftX = -ap.X
-        elseif ap.X + as.X > screen.X then shiftX = screen.X - (ap.X + as.X) end
-        if ap.Y < 0 then shiftY = -ap.Y
-        elseif ap.Y + as.Y > screen.Y then shiftY = screen.Y - (ap.Y + as.Y) end
-
-        if shiftX ~= 0 or shiftY ~= 0 then
-            local p = canvas.Position
-            canvas.Position = UDim2.new(p.X.Scale, p.X.Offset + shiftX, p.Y.Scale, p.Y.Offset + shiftY)
-        end
-    end
-
     --========================= DRAGGING =========================--
     do
-        local dragging, dragStart, startAbs
+        local dragging, dragStart, startPos
         topbar.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
                 dragging = true
                 dragStart = Vector2.new(i.Position.X, i.Position.Y)
-                startAbs = canvas.AbsolutePosition
+                startPos = canvas.Position
             end
         end)
         UserInputService.InputChanged:Connect(function(i)
             if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
                 local dx = i.Position.X - dragStart.X
                 local dy = i.Position.Y - dragStart.Y
-                -- двигаем в абсолютных пикселях, AnchorPoint = (0,0) уже выставлен при первом ресайзе,
-                -- но если ресайза не было — нормализуем якорь один раз
-                if canvas.AnchorPoint ~= Vector2.new(0,0) then
-                    local ap = canvas.AbsolutePosition
-                    canvas.AnchorPoint = Vector2.new(0,0)
-                    canvas.Position = UDim2.fromOffset(ap.X, ap.Y)
-                    startAbs = ap
-                end
-                canvas.Position = UDim2.fromOffset(startAbs.X + dx, startAbs.Y + dy)
-                clampToScreen()
+                canvas.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + dx, startPos.Y.Scale, startPos.Y.Offset + dy)
             end
         end)
         UserInputService.InputEnded:Connect(function(i)
@@ -634,43 +605,39 @@ function Library:CreateWindow(cfg)
             end
         end)
     end
-
-    --========================= RESIZING (NEW) =========================--
+  
+    --========================= RESIZING =========================--
     do
-        local EDGE = 10
+        local EDGE = 8
         local MIN_X, MIN_Y = 480, 300
         local MAX_X, MAX_Y = 1200, 800
+        local TOP_SAFE = 54     -- высота topbar — тут НЕ ресайзим (это перетаскивание)
 
         local resizing = false
         local dirX, dirY = 0, 0
-        local mouseStart            -- стартовая позиция курсора (пиксели экрана)
-        local startAbsPos           -- стартовый AbsolutePosition окна
-        local startAbsSize          -- стартовый AbsoluteSize окна
+        local mouseStart, startSize, startPos
 
-        -- Определяем край по позиции курсора относительно окна
         local function getEdge(px, py)
-            local ap = canvas.AbsolutePosition
-            local as = canvas.AbsoluteSize
-            local lx = px - ap.X
-            local ly = py - ap.Y
-            local dx, dy = 0, 0
-            if lx >= -EDGE and lx <= EDGE then dx = -1
-            elseif lx >= as.X - EDGE and lx <= as.X + EDGE then dx = 1 end
-            if ly >= -EDGE and ly <= EDGE then dy = -1
-            elseif ly >= as.Y - EDGE and ly <= as.Y + EDGE then dy = 1 end
-            return dx, dy
-        end
-
-        -- Перевод окна в режим "якорь сверху-слева" с сохранением позиции на экране
-        local function pinTopLeft()
             local ap = canvas.AbsolutePosition
             local as = canvas.AbsoluteSize
             local sc = winScale.Scale
             if not sc or sc <= 0 then sc = 1 end
-            canvas.AnchorPoint = Vector2.new(0, 0)
-            -- AbsoluteSize уже включает UIScale, а Size.Offset — нет, поэтому делим
-            canvas.Size = UDim2.fromOffset(as.X / sc, as.Y / sc)
-            canvas.Position = UDim2.fromOffset(ap.X, ap.Y)
+            local e = EDGE
+            local lx = px - ap.X
+            local ly = py - ap.Y
+            local dx, dy = 0, 0
+
+            if lx <= e then dx = -1
+            elseif lx >= as.X - e then dx = 1 end
+
+            -- верх НЕ трогаем (там topbar для перетаскивания)
+            if ly >= as.Y - e then dy = 1 end
+
+            -- если курсор в зоне topbar — запрещаем горизонтальный ресайз тоже
+            if ly < TOP_SAFE * sc and dy == 0 then
+                dx = 0
+            end
+            return dx, dy
         end
 
         canvas.InputBegan:Connect(function(i)
@@ -678,12 +645,11 @@ function Library:CreateWindow(cfg)
             or i.UserInputType == Enum.UserInputType.Touch then
                 local dx, dy = getEdge(i.Position.X, i.Position.Y)
                 if dx ~= 0 or dy ~= 0 then
-                    pinTopLeft()
                     resizing = true
                     dirX, dirY = dx, dy
-                    mouseStart  = Vector2.new(i.Position.X, i.Position.Y)
-                    startAbsPos = canvas.AbsolutePosition
-                    startAbsSize = canvas.AbsoluteSize
+                    mouseStart = Vector2.new(i.Position.X, i.Position.Y)
+                    startSize = canvas.Size
+                    startPos = canvas.Position
                 end
             end
         end)
@@ -696,44 +662,35 @@ function Library:CreateWindow(cfg)
             local sc = winScale.Scale
             if not sc or sc <= 0 then sc = 1 end
 
-            -- дельта курсора в "логических" пикселях окна
             local rawDX = i.Position.X - mouseStart.X
             local rawDY = i.Position.Y - mouseStart.Y
-
-            -- защита от мусорных значений
-            if rawDX ~= rawDX then rawDX = 0 end   -- nan check
+            if rawDX ~= rawDX then rawDX = 0 end
             if rawDY ~= rawDY then rawDY = 0 end
 
             local dX = rawDX / sc
             local dY = rawDY / sc
 
-            -- текущие размеры/позиция в логических пикселях
-            local baseW = startAbsSize.X / sc
-            local baseH = startAbsSize.Y / sc
-            local baseX = startAbsPos.X
-            local baseY = startAbsPos.Y
+            local newW  = startSize.X.Offset
+            local newH  = startSize.Y.Offset
+            local newPX = startPos.X.Offset
+            local newPY = startPos.Y.Offset
 
-            local newW, newH = baseW, baseH
-            local newX, newY = baseX, baseY
-
+            -- AnchorPoint (0.5,0.5): сдвигаем центр на половину прироста
             if dirX == 1 then
-                -- тянем ПРАВЫЙ край: левый угол на месте, ширина растёт
-                newW = math.clamp(baseW + dX, MIN_X, MAX_X)
+                newW = math.clamp(startSize.X.Offset + dX, MIN_X, MAX_X)
+                newPX = startPos.X.Offset + (newW - startSize.X.Offset) * sc / 2
             elseif dirX == -1 then
-                -- тянем ЛЕВЫЙ край: правый угол на месте, левый двигается
-                newW = math.clamp(baseW - dX, MIN_X, MAX_X)
-                newX = baseX + (baseW - newW) * sc
+                newW = math.clamp(startSize.X.Offset - dX, MIN_X, MAX_X)
+                newPX = startPos.X.Offset - (newW - startSize.X.Offset) * sc / 2
             end
 
             if dirY == 1 then
-                newH = math.clamp(baseH + dY, MIN_Y, MAX_Y)
-            elseif dirY == -1 then
-                newH = math.clamp(baseH - dY, MIN_Y, MAX_Y)
-                newY = baseY + (baseH - newH) * sc
+                newH = math.clamp(startSize.Y.Offset + dY, MIN_Y, MAX_Y)
+                newPY = startPos.Y.Offset + (newH - startSize.Y.Offset) * sc / 2
             end
 
-            canvas.Size     = UDim2.fromOffset(newW, newH)
-            canvas.Position = UDim2.fromOffset(newX, newY)
+            canvas.Size     = UDim2.new(startSize.X.Scale, newW, startSize.Y.Scale, newH)
+            canvas.Position = UDim2.new(startPos.X.Scale, newPX, startPos.Y.Scale, newPY)
         end)
 
         UserInputService.InputEnded:Connect(function(i)
@@ -744,7 +701,6 @@ function Library:CreateWindow(cfg)
             end
         end)
 
-        -- курсор у краёв
         canvas.InputChanged:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseMovement and not resizing then
                 local dx, dy = getEdge(i.Position.X, i.Position.Y)
@@ -2118,14 +2074,6 @@ function Library:CreateWindow(cfg)
     end)
 
     -- entrance animation
-    do
-        local cam = workspace.CurrentCamera
-        local screen = cam and cam.ViewportSize or Vector2.new(1920, 1080)
-        local w = canvas.AbsoluteSize.X
-        local h = canvas.AbsoluteSize.Y
-        canvas.AnchorPoint = Vector2.new(0, 0)
-        canvas.Position = UDim2.fromOffset((screen.X - w)/2, (screen.Y - h)/2)
-    end
     winScale.Scale = 0.9
     canvas.GroupTransparency = 1
     tween(winScale, TW.Slow, { Scale = 1 })
