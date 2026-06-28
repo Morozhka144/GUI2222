@@ -374,4 +374,3 @@ Made with ❤️ for the Roblox scripting community
 ⭐ Поставь звезду, если библиотека была полезна!
 
 </div>
-```
