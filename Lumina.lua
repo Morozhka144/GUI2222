@@ -890,11 +890,13 @@ function Library:CreateWindow(cfg)
         local cardScale = create("UIScale", { Scale = 0.8, Parent = card })
 
         -- accent-полоса слева
-        create("Frame", {
+        local accentBar = create("Frame", {
             BackgroundColor3 = col, BorderSizePixel = 0,
-            Size = UDim2.new(0, 3, 1, -12), Position = UDim2.new(0, 3, 0, 6),
+            Size = UDim2.new(0, 4, 1, -16),
+            Position = UDim2.new(0, 7, 0, 8),
             ZIndex = 2, Parent = card,
         })
+        corner(accentBar, 2)
 
         -- заголовок
         create("TextLabel", {
