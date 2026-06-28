@@ -626,7 +626,7 @@ function Library:CreateWindow(cfg)
 
     --========================= RESIZING =========================--
     do
-        local EDGE = 8          -- толщина зоны захвата у краёв (в пикселях)
+        local EDGE = 8
         local MIN_X, MIN_Y = 480, 300
         local MAX_X, MAX_Y = 1200, 800
 
@@ -634,7 +634,6 @@ function Library:CreateWindow(cfg)
         local resStart, startSize, startPos
         local dirX, dirY = 0, 0
 
-        -- определяем, за какой край/угол схватили (по позиции мыши относительно canvas)
         local function getEdge(px, py)
             local ap = canvas.AbsolutePosition
             local as = canvas.AbsoluteSize
@@ -649,7 +648,6 @@ function Library:CreateWindow(cfg)
             return dx, dy
         end
 
-        -- ловим нажатие на самом canvas (на любом крае)
         canvas.InputBegan:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseButton1
             or i.UserInputType == Enum.UserInputType.Touch then
@@ -667,37 +665,34 @@ function Library:CreateWindow(cfg)
         UserInputService.InputChanged:Connect(function(i)
             if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement
             or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = (i.Position - resStart) / winScale.Scale
+                -- ДЕЛИМ НА Scale (с большой S!), и защищаемся от 0/nil
+                local sc = winScale.Scale
+                if not sc or sc <= 0 then sc = 1 end
+                local d = (i.Position - resStart) / sc
 
-                local newW = startSize.X.Offset
-                local newH = startSize.Y.Offset
+                local newW  = startSize.X.Offset
+                local newH  = startSize.Y.Offset
                 local newPX = startPos.X.Offset
                 local newPY = startPos.Y.Offset
 
-                -- т.к. AnchorPoint = (0.5,0.5), при тяге за край смещаем центр на половину дельты
                 if dirX == 1 then
                     newW = math.clamp(startSize.X.Offset + d.X, MIN_X, MAX_X)
-                    local applied = newW - startSize.X.Offset
-                    newPX = startPos.X.Offset + applied/2
+                    newPX = startPos.X.Offset + (newW - startSize.X.Offset)/2
                 elseif dirX == -1 then
                     newW = math.clamp(startSize.X.Offset - d.X, MIN_X, MAX_X)
-                    local applied = newW - startSize.X.Offset
-                    newPX = startPos.X.Offset - applied/2
+                    newPX = startPos.X.Offset - (newW - startSize.X.Offset)/2
                 end
 
                 if dirY == 1 then
                     newH = math.clamp(startSize.Y.Offset + d.Y, MIN_Y, MAX_Y)
-                    local applied = newH - startSize.Y.Offset
-                    newPY = startPos.Y.Offset + applied/2
+                    newPY = startPos.Y.Offset + (newH - startSize.Y.Offset)/2
                 elseif dirY == -1 then
                     newH = math.clamp(startSize.Y.Offset - d.Y, MIN_Y, MAX_Y)
-                    local applied = newH - startSize.Y.Offset
-                    newPY = startPos.Y.Offset - applied/2
+                    newPY = startPos.Y.Offset - (newH - startSize.Y.Offset)/2
                 end
 
-                canvas.Size = UDim2.new(startPos.X.Scale, newW, startPos.Y.Scale, newH)
+                canvas.Size     = UDim2.new(startPos.X.Scale, newW,  startPos.Y.Scale, newH)
                 canvas.Position = UDim2.new(startPos.X.Scale, newPX, startPos.Y.Scale, newPY)
-                clampToScreen()
             end
         end)
 
@@ -709,7 +704,6 @@ function Library:CreateWindow(cfg)
             end
         end)
 
-        -- меняем курсор у краёв (только мышь)
         canvas.InputChanged:Connect(function(i)
             if i.UserInputType == Enum.UserInputType.MouseMovement and not resizing then
                 local dx, dy = getEdge(i.Position.X, i.Position.Y)
@@ -730,6 +724,7 @@ function Library:CreateWindow(cfg)
             if not resizing then UserInputService.MouseIcon = "" end
         end)
     end
+  
     --========================= TOGGLE / OPEN-CLOSE =========================--
     local isOpen = true
     function Window:Toggle(state)
