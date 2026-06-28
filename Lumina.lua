@@ -405,7 +405,7 @@ function Library:CreateWindow(cfg)
         Parent = fxHolder,
     })
     corner(borderFrame, 14)
-    stroke(borderFrame, Theme.Stroke, 1.5, 1)
+    stroke(borderFrame, Theme.Stroke, 1.5, 0)
 
     -- держим fxHolder под canvas по позиции/размеру
     local function syncFX()
@@ -423,7 +423,7 @@ function Library:CreateWindow(cfg)
         BackgroundTransparency = 1,
         Image = "rbxassetid://6014261993",
         ImageColor3 = Color3.new(0,0,0),
-        ImageTransparency = 0.4,
+        ImageTransparency = 1,
         ScaleType = Enum.ScaleType.Slice,
         SliceCenter = Rect.new(49,49,450,450),
         Size = UDim2.new(1, 60, 1, 60),
