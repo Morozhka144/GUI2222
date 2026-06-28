@@ -646,7 +646,7 @@ function Library:CreateWindow(cfg)
         UserInputService.InputChanged:Connect(function(i)
             if resizing and (i.UserInputType == Enum.UserInputType.MouseMovement
             or i.UserInputType == Enum.UserInputType.Touch) then
-                local d = (i.Position - resStart) / winScale.scale
+                local d = (i.Position - resStart) / winScale.Scale
 
                 local newW = startSize.X.Offset
                 local newH = startSize.Y.Offset
