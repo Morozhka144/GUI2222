@@ -270,10 +270,20 @@ end
 local function serialize(v)
     if typeof(v) == "Color3" then return {__t="c", v.R, v.G, v.B} end
     if typeof(v) == "EnumItem" then return {__t="e", tostring(v)} end
+    if typeof(v) == "UDim2" then return {__t="u2", v.X.Scale, v.X.Offset, v.Y.Scale, v.Y.Offset} end
+    if typeof(v) == "Vector2" then return {__t="v2", v.X, v.Y} end
+    if type(v) == "table" then
+        if v.__t then return v end
+        local t = {}
+        for k, sub in pairs(v) do
+            t[k] = serialize(sub)
+        end
+        return t
+    end
     return v
 end
 local function deserialize(v)
-    if type(v) == "table" and v.__t then
+    if type(v) == "table" then
         if v.__t == "c" then return Color3.new(v[1], v[2], v[3]) end
         if v.__t == "e" then
             local parts = string.split(v[1], ".")
@@ -281,6 +291,23 @@ local function deserialize(v)
             for i = 2, #parts do e = e[parts[i]] end
             return e
         end
+        if v.__t == "u2" then
+            local x1 = tonumber(v[1] or v["1"]) or 0
+            local x2 = tonumber(v[2] or v["2"]) or 0
+            local y1 = tonumber(v[3] or v["3"]) or 0
+            local y2 = tonumber(v[4] or v["4"]) or 0
+            return UDim2.new(x1, x2, y1, y2)
+        end
+        if v.__t == "v2" then
+            local x = tonumber(v[1] or v["1"]) or 0
+            local y = tonumber(v[2] or v["2"]) or 0
+            return Vector2.new(x, y)
+        end
+        local t = {}
+        for k, sub in pairs(v) do
+            t[k] = deserialize(sub)
+        end
+        return t
     end
     return v
 end
@@ -804,6 +831,77 @@ function Library:CreateWindow(cfg)
             if not resizing then UserInputService.MouseIcon = "" end
         end)
     end
+
+    --========================= WINDOW SIZE =========================--
+    local function parseSize(w, h)
+        local width, height
+        if typeof(w) == "UDim2" then
+            width = w.X.Offset
+            height = w.Y.Offset
+        elseif typeof(w) == "Vector2" then
+            width = w.X
+            height = w.Y
+        elseif type(w) == "table" then
+            if w.__t == "u2" then
+                width = tonumber(w[2] or w["2"])
+                height = tonumber(w[4] or w["4"])
+            elseif w.__t == "v2" or (#w == 2 and not w.width and not w.X) then
+                width = tonumber(w[1] or w["1"])
+                height = tonumber(w[2] or w["2"])
+            elseif #w == 4 then
+                width = tonumber(w[2] or w["2"])
+                height = tonumber(w[4] or w["4"])
+            else
+                if type(w.X) == "table" then
+                    width = tonumber(w.X.Offset)
+                elseif w.X then
+                    width = tonumber(w.X)
+                elseif w.width then
+                    width = tonumber(w.width)
+                elseif w.W then
+                    width = tonumber(w.W)
+                end
+
+                if type(w.Y) == "table" then
+                    height = tonumber(w.Y.Offset)
+                elseif w.Y then
+                    height = tonumber(w.Y)
+                elseif w.height then
+                    height = tonumber(w.height)
+                elseif w.H then
+                    height = tonumber(w.H)
+                end
+            end
+        else
+            width = tonumber(w)
+            height = tonumber(h)
+        end
+        return width, height
+    end
+
+    function Window:SetSize(w, h, animate)
+        local width, height = parseSize(w, h)
+        if width and height then
+            width = math.clamp(math.floor(width + 0.5), 480, 1200)
+            height = math.clamp(math.floor(height + 0.5), 300, 800)
+            local targetSize = UDim2.fromOffset(width, height)
+            if animate then
+                tween(canvas, TW.Normal, { Size = targetSize })
+            else
+                canvas.Size = targetSize
+            end
+        end
+    end
+
+    function Window:GetSize()
+        return canvas.Size
+    end
+
+    Library:RegisterFunction("_WindowSize", function()
+        return Window:GetSize()
+    end, function(v)
+        Window:SetSize(v)
+    end)
   
     --========================= TOGGLE / OPEN-CLOSE =========================--
     local isOpen = true
@@ -1417,12 +1515,68 @@ function Library:CreateWindow(cfg)
         end
     end
 
+    local function parsePosition(pos)
+        if typeof(pos) == "UDim2" then
+            return pos
+        elseif typeof(pos) == "Vector2" then
+            return UDim2.fromOffset(pos.X, pos.Y)
+        elseif type(pos) == "table" then
+            if pos.__t == "u2" then
+                local xs = tonumber(pos[1] or pos["1"]) or 0
+                local xo = tonumber(pos[2] or pos["2"]) or 0
+                local ys = tonumber(pos[3] or pos["3"]) or 0
+                local yo = tonumber(pos[4] or pos["4"]) or 0
+                return UDim2.new(xs, xo, ys, yo)
+            elseif pos.__t == "v2" then
+                local x = tonumber(pos[1] or pos["1"]) or 0
+                local y = tonumber(pos[2] or pos["2"]) or 0
+                return UDim2.fromOffset(x, y)
+            elseif #pos == 4 then
+                local xs = tonumber(pos[1] or pos["1"]) or 0
+                local xo = tonumber(pos[2] or pos["2"]) or 0
+                local ys = tonumber(pos[3] or pos["3"]) or 0
+                local yo = tonumber(pos[4] or pos["4"]) or 0
+                return UDim2.new(xs, xo, ys, yo)
+            elseif #pos == 2 then
+                local x = tonumber(pos[1] or pos["1"]) or 0
+                local y = tonumber(pos[2] or pos["2"]) or 0
+                return UDim2.fromOffset(x, y)
+            elseif pos.X and pos.Y then
+                local xs = type(pos.X) == "table" and (pos.X.Scale or pos.X[1] or 0) or 0
+                local xo = type(pos.X) == "table" and (pos.X.Offset or pos.X[2] or 0) or tonumber(pos.X) or 0
+                local ys = type(pos.Y) == "table" and (pos.Y.Scale or pos.Y[1] or 0) or 0
+                local yo = type(pos.Y) == "table" and (pos.Y.Offset or pos.Y[2] or 0) or tonumber(pos.Y) or 0
+                return UDim2.new(xs, xo, ys, yo)
+            end
+        end
+        return nil
+    end
+
+    Window._setFastMenuPosition = function(pos)
+        local u2 = parsePosition(pos)
+        if u2 then
+            fastFrame.Position = u2
+        end
+    end
+
+    Window._getFastMenuPosition = function()
+        return fastFrame.Position
+    end
+
+    Library:RegisterFunction("_FastMenuPosition", function()
+        return Window._getFastMenuPosition()
+    end, function(v)
+        Window._setFastMenuPosition(v)
+    end)
+
     function Window:GetFastMenu()
         return {
             Gui = fastFrame,
             SetVisible = Window._setFastMenuVisible,
             SetScale = Window._setFastMenuScale,
             SetLocked = Window._setFastMenuLocked,
+            SetPosition = Window._setFastMenuPosition,
+            GetPosition = Window._getFastMenuPosition,
             SetToggles = Window._setFastMenuToggles,
             Refresh = Window._refreshFastMenu,
         }
@@ -1670,12 +1824,31 @@ function Library:CreateWindow(cfg)
         kbLockBadge.Visible = v
     end
 
+    Window._setKeybindListPosition = function(pos)
+        local u2 = parsePosition(pos)
+        if u2 then
+            kbFrame.Position = u2
+        end
+    end
+
+    Window._getKeybindListPosition = function()
+        return kbFrame.Position
+    end
+
+    Library:RegisterFunction("_KeybindListPosition", function()
+        return Window._getKeybindListPosition()
+    end, function(v)
+        Window._setKeybindListPosition(v)
+    end)
+
     function Window:GetKeybindList()
         return {
             Gui = kbFrame,
             SetVisible = Window._setKeybindListVisible,
             SetScale = Window._setKeybindListScale,
             SetLocked = Window._setKeybindListLocked,
+            SetPosition = Window._setKeybindListPosition,
+            GetPosition = Window._getKeybindListPosition,
             Refresh = Window._refreshKeybindList,
         }
     end
@@ -3251,6 +3424,14 @@ function Library:CreateWindow(cfg)
             end,
         })
 
+        theme:AddButton({
+            Name = "Reset Window Size",
+            Callback = function()
+                Window:SetSize(600, 340, true)
+                Window:Notify({ Title = "Window", Content = "Size reset to 600x340.", Type = "Info", Duration = 1.5 })
+            end,
+        })
+
         --========================= ACTIONS =========================--
         local actions = tab:CreateSection({ Name = "Actions" })
         actions:AddButton({ Name = "Unload Menu", Callback = function()
@@ -3325,6 +3506,14 @@ function Library:CreateWindow(cfg)
             end,
         })
 
+        fastSec:AddButton({
+            Name = "Reset Position",
+            Callback = function()
+                Window._setFastMenuPosition(UDim2.new(0, 30, 0.35, 0))
+                Window:Notify({ Title = "Fast Menu", Content = "Position reset to default.", Type = "Info", Duration = 1.5 })
+            end,
+        })
+
         --========================= KEYBIND LIST =========================--
         local kbSec = tab:CreateSection({ Name = "Keybind List" })
 
@@ -3357,6 +3546,14 @@ function Library:CreateWindow(cfg)
             Flag = "_KeybindListLocked",
             Callback = function(v)
                 Window._setKeybindListLocked(v)
+            end,
+        })
+
+        kbSec:AddButton({
+            Name = "Reset Position",
+            Callback = function()
+                Window._setKeybindListPosition(UDim2.new(0, 30, 0.62, 0))
+                Window:Notify({ Title = "Keybind List", Content = "Position reset to default.", Type = "Info", Duration = 1.5 })
             end,
         })
 
