@@ -3111,33 +3111,6 @@ function Library:CreateWindow(cfg)
             end,
         })
 
-        --========================= ACTIONS =========================--
-        local actions = tab:CreateSection({ Name = "Actions" })
-        actions:AddButton({ Name = "Unload Menu", Callback = function()
-            Window.Gui:Destroy()
-        end })
-        actions:AddButton({ Name = "Rejoin Server", Callback = function()
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end })
-        actions:AddButton({ Name = "Server Hop", Primary = true, Callback = function()
-            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
-            local ok, servers = pcall(function()
-                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
-                return HttpService:JSONDecode(game:HttpGet(url))
-            end)
-            if ok and servers and servers.data then
-                for _, s in ipairs(servers.data) do
-                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
-                        end)
-                        return
-                    end
-                end
-            end
-            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
-        end })
-
         --========================= FAST MENU =========================--
         local fastSec = tab:CreateSection({ Name = "Fast Menu" })
 
@@ -3219,6 +3192,33 @@ function Library:CreateWindow(cfg)
                 Window._setKeybindListLocked(v)
             end,
         })
+
+        --========================= ACTIONS =========================--
+        local actions = tab:CreateSection({ Name = "Actions" })
+        actions:AddButton({ Name = "Unload Menu", Callback = function()
+            Window.Gui:Destroy()
+        end })
+        actions:AddButton({ Name = "Rejoin Server", Callback = function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end })
+        actions:AddButton({ Name = "Server Hop", Primary = true, Callback = function()
+            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
+            local ok, servers = pcall(function()
+                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+                return HttpService:JSONDecode(game:HttpGet(url))
+            end)
+            if ok and servers and servers.data then
+                for _, s in ipairs(servers.data) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        pcall(function()
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                        end)
+                        return
+                    end
+                end
+            end
+            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
+        end })
 
         --========================= CONFIGURATION =========================--
         tab:Column("right")
