@@ -224,6 +224,7 @@ Library.Flags = {}           -- central state table (compat with flags & element
 Library.Functions = Library.Flags -- alias so functions can be accessed as Library.Functions
 Library.Elements = Library.Flags  -- alias so elements can be accessed as Library.Elements
 Library.ConfigRegistry = {}       -- canonical registry of all saved functions/elements
+Library._isListeningKeybind = false -- true when any keybind button is awaiting key input
 
 local function registerAccent(obj, prop)
     table.insert(Library.AccentObjects, { obj = obj, prop = prop })
@@ -398,6 +399,26 @@ function Library:CreateWindow(cfg)
     cfg = cfg or {}
     local Window = {}
     Window._tabs = {}
+
+    -- Default menu toggle key: RightShift (R Shift)
+    local rawToggleKey = cfg.ToggleKey or cfg.Key or Enum.KeyCode.RightShift
+    if type(rawToggleKey) == "string" then
+        rawToggleKey = Enum.KeyCode[rawToggleKey] or Enum.UserInputType[rawToggleKey] or Enum.KeyCode.RightShift
+    end
+    Window._toggleKey = rawToggleKey
+
+    function Window:SetToggleKey(key)
+        if type(key) == "string" then
+            key = Enum.KeyCode[key] or Enum.UserInputType[key]
+        end
+        if typeof(key) == "EnumItem" and (key.EnumType == Enum.KeyCode or key.EnumType == Enum.UserInputType) then
+            Window._toggleKey = key
+        end
+    end
+
+    function Window:GetToggleKey()
+        return Window._toggleKey
+    end
 
     -- root gui
     local gui = create("ScreenGui", {
@@ -786,6 +807,62 @@ function Library:CreateWindow(cfg)
   
     --========================= TOGGLE / OPEN-CLOSE =========================--
     local isOpen = true
+
+    function Window:IsOpen()
+        return isOpen
+    end
+
+    -- Invisible modal button inside canvas: forces Roblox camera script to release mouse lock and disable camera pan/zoom
+    local modalBtn = create("TextButton", {
+        Name = "CursorModal",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(0, 0, 0, 0),
+        Text = "",
+        Modal = true,
+        Visible = true,
+        Active = true,
+        Selectable = false,
+        Parent = canvas,
+    })
+
+    -- Force unlock mouse cursor (for first-person/mouse-locked games like Doors)
+    local updatingMouse = false
+    local function forceMouseUnlock()
+        if not isOpen or updatingMouse then return end
+        updatingMouse = true
+        pcall(function()
+            if UserInputService.MouseBehavior ~= Enum.MouseBehavior.Default then
+                UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+            end
+            if not UserInputService.MouseIconEnabled then
+                UserInputService.MouseIconEnabled = true
+            end
+            if Enum.OverrideMouseIconBehavior and Enum.OverrideMouseIconBehavior.ForceShow then
+                UserInputService.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.ForceShow
+            end
+        end)
+        updatingMouse = false
+    end
+
+    local mouseSteppedConn = RunService.RenderStepped:Connect(function()
+        if isOpen then
+            forceMouseUnlock()
+        end
+    end)
+
+    local mouseBehaviorConn = UserInputService:GetPropertyChangedSignal("MouseBehavior"):Connect(function()
+        if isOpen then
+            forceMouseUnlock()
+        end
+    end)
+
+    local mouseIconConn = UserInputService:GetPropertyChangedSignal("MouseIconEnabled"):Connect(function()
+        if isOpen then
+            forceMouseUnlock()
+        end
+    end)
+
     function Window:Toggle(state)
         if state == nil then state = not isOpen end
         isOpen = state
@@ -793,6 +870,10 @@ function Library:CreateWindow(cfg)
         local borderStroke = borderFrame:FindFirstChildOfClass("UIStroke")
 
         if isOpen then
+            modalBtn.Modal = true
+            modalBtn.Visible = true
+            forceMouseUnlock()
+
             if Window._setPulse then Window._setPulse(true) end
             canvas.Visible = true
             fxHolder.Visible = true
@@ -807,6 +888,14 @@ function Library:CreateWindow(cfg)
             end
             if borderStroke then tween(borderStroke, TW.Normal, { Transparency = 0 }) end
         else
+            modalBtn.Modal = false
+            modalBtn.Visible = false
+            pcall(function()
+                if Enum.OverrideMouseIconBehavior and Enum.OverrideMouseIconBehavior.None then
+                    UserInputService.OverrideMouseIconBehavior = Enum.OverrideMouseIconBehavior.None
+                end
+            end)
+
             if Window._setPulse then Window._setPulse(false) end
             tween(winScale, TW.Normal, { Scale = userScale * 0.95 })
             for _, ch in ipairs(fxHolder:GetChildren()) do
@@ -824,6 +913,44 @@ function Library:CreateWindow(cfg)
             end)
         end
     end
+
+    -- Initial unlock on creation
+    task.spawn(function()
+        task.wait()
+        if isOpen then
+            forceMouseUnlock()
+        end
+    end)
+
+    -- Toggle key listener (PC / keyboard / mouse keybind)
+    local toggleInputConn = UserInputService.InputBegan:Connect(function(input, gpe)
+        if UserInputService:GetFocusedTextBox() then return end
+        if Library._isListeningKeybind then return end
+
+        local targetKey = Window._toggleKey
+        if not targetKey then return end
+
+        local matched = false
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            matched = (input.KeyCode == targetKey)
+        else
+            matched = (input.UserInputType == targetKey)
+        end
+
+        if matched then
+            Window:Toggle()
+        end
+    end)
+
+    gui.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            isOpen = false
+            if mouseSteppedConn then mouseSteppedConn:Disconnect() end
+            if mouseBehaviorConn then mouseBehaviorConn:Disconnect() end
+            if mouseIconConn then mouseIconConn:Disconnect() end
+            if toggleInputConn then toggleInputConn:Disconnect() end
+        end
+    end)
 
     --========================= MOBILE FLOAT BUTTON =========================--
     do
@@ -2152,6 +2279,9 @@ function Library:CreateWindow(cfg)
                 function toggleApi:AddKeybind(kbCfg)
                     kbCfg = kbCfg or {}
                     local current = kbCfg.Default
+                    if type(current) == "string" then
+                        current = Enum.KeyCode[current] or Enum.UserInputType[current] or nil
+                    end
                     local mode = kbCfg.Mode or "Toggle" -- "Toggle" | "Hold" | "Always"
                     local listening = false
 
@@ -2200,6 +2330,7 @@ function Library:CreateWindow(cfg)
 
                     kbBtn.MouseButton1Click:Connect(function()
                         listening = true
+                        Library._isListeningKeybind = true
                         kbBtn.Text = "..."
                         tween(kbs, TW.Fast, { Color = Theme.Accent, Transparency = 0 })
                     end)
@@ -2209,6 +2340,7 @@ function Library:CreateWindow(cfg)
                     UserInputService.InputBegan:Connect(function(i, gpe)
                         if listening then
                             listening = false
+                            Library._isListeningKeybind = false
                             tween(kbs, TW.Fast, { Color = Theme.StrokeLight, Transparency = 0.2 })
                             if i.UserInputType == Enum.UserInputType.Keyboard then
                                 current = i.KeyCode
@@ -2269,12 +2401,12 @@ function Library:CreateWindow(cfg)
                             if type(saved) == "table" then
                                 if saved.Key then
                                     local kc = Enum.KeyCode[saved.Key] or Enum.UserInputType[saved.Key]
-                                    setKey(kc, false)
+                                    setKey(kc, true)
                                 end
                                 if saved.Mode then setMode(saved.Mode) end
                             elseif type(saved) == "string" then
                                 local kc = Enum.KeyCode[saved] or Enum.UserInputType[saved]
-                                setKey(kc, false)
+                                setKey(kc, true)
                             end
                         end
                     )
@@ -2784,6 +2916,9 @@ function Library:CreateWindow(cfg)
             function Section:AddKeybind(o)
                 o = o or {}
                 local current = o.Default
+                if type(current) == "string" then
+                    current = Enum.KeyCode[current] or Enum.UserInputType[current] or nil
+                end
                 local mode = o.Mode or "Toggle" -- "Toggle" | "Hold" | "Always"
                 local active = (mode == "Always")
                 local listening = false
@@ -2833,6 +2968,7 @@ function Library:CreateWindow(cfg)
 
                 keyBtn.MouseButton1Click:Connect(function()
                     listening = true
+                    Library._isListeningKeybind = true
                     keyBtn.Text = "..."
                     tween(ks, TW.Fast, { Color = Theme.Accent, Transparency = 0 })
                 end)
@@ -2842,6 +2978,7 @@ function Library:CreateWindow(cfg)
                 UserInputService.InputBegan:Connect(function(i, gpe)
                     if listening then
                         listening = false
+                        Library._isListeningKeybind = false
                         tween(ks, TW.Fast, { Color = Theme.StrokeLight, Transparency = 0.2 })
                         if i.UserInputType == Enum.UserInputType.Keyboard then
                             current = i.KeyCode
@@ -2902,12 +3039,12 @@ function Library:CreateWindow(cfg)
                         if type(saved) == "table" then
                             if saved.Key then
                                 local kc = Enum.KeyCode[saved.Key] or Enum.UserInputType[saved.Key]
-                                setKey(kc, false)
+                                setKey(kc, true)
                             end
                             if saved.Mode then setMode(saved.Mode) end
                         elseif type(saved) == "string" then
                             local kc = Enum.KeyCode[saved] or Enum.UserInputType[saved]
-                            setKey(kc, false)
+                            setKey(kc, true)
                         end
                     end
                 )
@@ -3086,10 +3223,13 @@ function Library:CreateWindow(cfg)
         -- Клавиша открытия/закрытия меню
         theme:AddKeybind({
             Name = "Menu Toggle",
-            Default = Window._toggleKey,
+            Default = Window._toggleKey or Enum.KeyCode.RightShift,
             Flag = "_MenuKey",
             ChangedCallback = function(key)
-                if typeof(key) == "EnumItem" and key.EnumType == Enum.KeyCode then
+                if type(key) == "string" then
+                    key = Enum.KeyCode[key] or Enum.UserInputType[key]
+                end
+                if typeof(key) == "EnumItem" and (key.EnumType == Enum.KeyCode or key.EnumType == Enum.UserInputType) then
                     Window._toggleKey = key
                 end
             end,
@@ -3110,6 +3250,33 @@ function Library:CreateWindow(cfg)
                 if PRESET_ACCENTS[v] then setAccent(PRESET_ACCENTS[v]) end
             end,
         })
+
+        --========================= ACTIONS =========================--
+        local actions = tab:CreateSection({ Name = "Actions" })
+        actions:AddButton({ Name = "Unload Menu", Callback = function()
+            Window.Gui:Destroy()
+        end })
+        actions:AddButton({ Name = "Rejoin Server", Callback = function()
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end })
+        actions:AddButton({ Name = "Server Hop", Primary = true, Callback = function()
+            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
+            local ok, servers = pcall(function()
+                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+                return HttpService:JSONDecode(game:HttpGet(url))
+            end)
+            if ok and servers and servers.data then
+                for _, s in ipairs(servers.data) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        pcall(function()
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                        end)
+                        return
+                    end
+                end
+            end
+            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
+        end })
 
         --========================= FAST MENU =========================--
         local fastSec = tab:CreateSection({ Name = "Fast Menu" })
@@ -3192,33 +3359,6 @@ function Library:CreateWindow(cfg)
                 Window._setKeybindListLocked(v)
             end,
         })
-
-        --========================= ACTIONS =========================--
-        local actions = tab:CreateSection({ Name = "Actions" })
-        actions:AddButton({ Name = "Unload Menu", Callback = function()
-            Window.Gui:Destroy()
-        end })
-        actions:AddButton({ Name = "Rejoin Server", Callback = function()
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end })
-        actions:AddButton({ Name = "Server Hop", Primary = true, Callback = function()
-            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
-            local ok, servers = pcall(function()
-                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
-                return HttpService:JSONDecode(game:HttpGet(url))
-            end)
-            if ok and servers and servers.data then
-                for _, s in ipairs(servers.data) do
-                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
-                        pcall(function()
-                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
-                        end)
-                        return
-                    end
-                end
-            end
-            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
-        end })
 
         --========================= CONFIGURATION =========================--
         tab:Column("right")
