@@ -15,8 +15,12 @@
 ### ✨ Возможности
 - 🪟 Перетаскиваемое окно с изменяемым размером
 - 📂 Вкладки с иконками (поддержка [Lucide](https://lucide.dev/icons/))
+- 🗂️ Сворачиваемые секции (Collapsible Sections) с плавной анимацией
+- 📎 Суб-элементы к тогглам (`AddColorPicker` и `AddKeybind` в одной строке)
+- ⌨️ Кейбинды с режимами (`Toggle`, `Hold`, `Always`) и экранным оверлеем (Keybind List HUD)
+- ⚡ Fast Menu — быстрое экранное меню для избранных функций
 - 🧩 Множество элементов (тоглы, слайдеры, дропдауны и др.)
-- 💾 Система сохранения конфигов
+- 💾 Автоматическая система конфигов (по имени элементов или функциям)
 - 🎨 20 пресетов акцентного цвета
 - 🔧 Настройка масштаба интерфейса
 - 🔔 Красивые уведомления
@@ -69,13 +73,34 @@ Tab:Column("right")
 
 ---
 
-## 🗂️ Секции
+## 🗂️ Секции (Collapsible Sections)
+
+Секции поддерживают сворачивание/разворачивание по клику на заголовок с плавной анимацией шеврона.
 
 ```lua
 local Section = Tab:CreateSection({
     Name = "Combat",
+    Collapsible = true,      -- можно ли сворачивать (по умолчанию true)
+    Collapsed = false,       -- начальное состояние (по умолчанию false)
+    Flag = "Combat_Section", -- (опционально) сохранение состояния в конфиг
+    Callback = function(isCollapsed)
+        print("Секция свернута:", isCollapsed)
+    end,
 })
+
+-- Программное управление
+Section:SetCollapsed(true)   -- свернуть
+Section:SetCollapsed(false)  -- развернуть
+print(Section:IsCollapsed()) -- проверка состояния (boolean)
 ```
+
+| Параметр | Тип | По умолчанию | Описание |
+|----------|-----|--------------|----------|
+| `Name` | string | `"Section"` | Заголовок секции |
+| `Collapsible` | boolean | `true` | Доступность сворачивания при клике |
+| `Collapsed` | boolean | `false` | Начальное состояние секции (свернута/развернута) |
+| `Flag` | string | `nil` | Ключ для сохранения состояния в конфиг |
+| `Callback` | function | `nil` | Вызывается при сворачивании/разворачивании `function(isCollapsed)` |
 
 ---
 
@@ -100,18 +125,39 @@ local lbl = Section:AddLabel("Просто текст")
 lbl.Set("Новый текст")
 ```
 
-### 🎚️ Toggle
+### 🎚️ Toggle & 📎 Суб-элементы
+
+Тогглы поддерживают прикрепление компактных **суб-элементов прямо в строку тоггла** (ColorPicker и Keybind)!
+
 ```lua
-Section:AddToggle({
-    Name = "Enable ESP",
+local toggle = Section:AddToggle({
+    Name = "Player ESP",
     Icon = "eye",
     Default = false,
-    Flag = "ESP_Enabled",
     Callback = function(value)
         print("ESP:", value)
     end,
 })
+
+-- Суб-элемент: ColorPicker (компактный цветной квадрат рядом с переключателем)
+local colorPicker = toggle:AddColorPicker({
+    Default = Color3.fromRGB(0, 255, 134),
+    Callback = function(color)
+        print("ESP Color:", color)
+    end,
+})
+
+-- Суб-элемент: Keybind (клавиша управления этим тогглом прямо в строке)
+local keybind = toggle:AddKeybind({
+    Default = Enum.KeyCode.E,
+    Mode = "Toggle", -- "Toggle" (переключение), "Hold" (зажатие), "Always" (всегда активен)
+})
 ```
+
+> 💡 **Особенности суб-элементов:**
+> - Кейбинд в тоггле автоматически включает/выключает родительский тоггл согласно выбранному режиму.
+> - **ПКМ (правый клик)** по кнопке кейбинда циклически меняет режим: `Toggle` ➔ `Hold` ➔ `Always`.
+> - Все привязанные кейбинды автоматически попадают в экранный оверлей **Keybind List HUD**.
 
 ### 🎛️ Slider
 ```lua
@@ -187,19 +233,35 @@ box.Get()
 ```
 
 ### 🎹 Keybind
+
+Полноценные кейбинды с поддержкой режимов работы (`Toggle`, `Hold`, `Always`) и интеграцией в экранный оверлей:
+
 ```lua
-Section:AddKeybind({
-    Name = "Fly Toggle",
+local kb = Section:AddKeybind({
+    Name = "Fly",
     Default = Enum.KeyCode.F,
-    Flag = "FlyKey",
-    Callback = function()
-        print("клавиша нажата!")
+    Mode = "Toggle", -- "Toggle" (переключение), "Hold" (зажатие), "Always" (всегда активен)
+    Callback = function(active)
+        print("Fly состояние:", active)
     end,
     ChangedCallback = function(newKey)
-        print("новая клавиша:", newKey.Name)
+        print("Новая клавиша:", newKey.Name)
+    end,
+    ModeCallback = function(newMode)
+        print("Новый режим:", newMode)
     end,
 })
+
+-- Программное управление
+kb.Set(Enum.KeyCode.G)
+kb.SetMode("Hold")
+print(kb.Get(), kb.GetMode(), kb.GetActive())
 ```
+
+> 🖱️ **Быстрое переключение режима:**
+> - **ЛКМ** по кнопке — назначение новой клавиши (`...`).
+> - **ПКМ (правый клик)** по кнопке — циклическая смена режима (`Toggle` ➔ `Hold` ➔ `Always`).
+> - Все настроенные кейбинды автоматически попадают в экранный оверлей **Keybind List HUD**!
 
 ### 🎨 ColorPicker
 ```lua
@@ -238,7 +300,40 @@ Window:AddSettingsTab()
 - 🔧 **UI Scale** — масштаб интерфейса
 - ⌨️ **Menu Toggle** — клавиша открытия меню
 - 🎨 **Accent Color** — цвет акцента (20 пресетов)
+- ⚡ **Fast Menu** — плавающее мини-меню с выбранными тогглами
+- ⌨️ **Keybind List** — плавающий экранный оверлей активных кейбиндов
 - 💾 **Configuration** — система конфигов
+
+---
+
+## ⚡ Fast Menu (Быстрое меню)
+
+Плавающий виджет на экране, позволяющий быстро включать и выключать выбранные функции без необходимости каждый раз открывать основное меню.
+
+- 🔘 **Выбор функций**: через множественный выбор (`Select Functions`) выбираются только нужные пользователю функции (тогглы).
+- 🖱️ **Перемещение**: зажав заголовок мини-меню, его можно перетащить в любую точку экрана.
+- 🔒 **Фиксация (Lock Position)**: переключатель для закрепления меню на экране, предотвращающий случайные сдвиги во время игры.
+- 🔍 **Масштаб (Menu Scale)**: регулировка размера оверлея от 50% до 150%.
+- 🔄 **Мгновенная синхронизация**: переключение тоггла в Fast Menu сразу обновляет элемент в основном меню, запускает Callback и наоборот.
+
+---
+
+## ⌨️ Keybind List HUD (Экранный оверлей кейбиндов)
+
+Стильный плавающий оверлей в духе премиум чит-меню (Neverlose / Gamesense), отображающий все привязанные клавиши, их текущий режим и статус активности:
+
+- 📋 **Список клавиш**: отображает имя функции, назначенную клавишу и режим (`[T]` для Toggle, `[H]` для Hold, `[A]` для Always).
+- 💡 **Индикация активности**: когда функция активна или клавиша зажата, строка и бейдж подсвечиваются ярким акцентным цветом.
+- 🖱️ **Перетаскивание и блокировка**: оверлей можно свободно двигать по экрану и блокировать позицию (`Lock Position`).
+- 🔍 **Масштабирование**: настройка размера (`HUD Scale`) от 50% до 150%.
+- 💻 **API**:
+  ```lua
+  local kbHud = Window:GetKeybindList()
+  kbHud.SetVisible(true)    -- показать/скрыть
+  kbHud.SetLocked(true)     -- закрепить
+  kbHud.SetScale(1.2)       -- масштаб
+  kbHud.Refresh()           -- принудительное обновление
+  ```
 
 ---
 
@@ -246,7 +341,10 @@ Window:AddSettingsTab()
 
 > Требуются файловые функции исполнителя (`writefile`, `readfile`)
 
+Все функции и элементы интерфейса (`AddToggle`, `AddSlider`, `AddDropdown` и т.д.) сохраняются в конфиг **автоматически по их названию (`Name`)** — указывать флаги больше не требуется!
+
 ```lua
+-- Управление файлами конфигов
 Library:SaveConfig("my_config")
 Library:LoadConfig("my_config")
 Library:DeleteConfig("my_config")
@@ -255,9 +353,20 @@ Library:GetConfigs()
 Library:SetAutoLoad("my_config")
 Library:GetAutoLoad()
 Library:ClearAutoLoad()
+
+-- Программная работа с таблицей конфига
+local configData = Library:GetConfig()   -- получить текущее состояние всех функций
+Library:ApplyConfig(configData)          -- применить настройки из таблицы
+
+-- Регистрация любой кастомной функции в конфиг (без UI элемента)
+Library:RegisterFunction("CustomFeature", function()
+    return myVariable                    -- getter
+end, function(value)
+    myVariable = value                   -- setter
+end)
 ```
 
-> ⚠️ Чтобы элемент сохранялся — обязательно укажи `Flag`!
+> 💡 **Флаги больше не нужны!** Элементы автоматически сохраняются и восстанавливаются по имени `Name`. Если нужно исключить элемент из конфига, укажи `NoConfig = true`. (Параметр `Flag` по-прежнему поддерживается для обратной совместимости).
 
 ---
 
@@ -289,18 +398,22 @@ Combat:AddSlider({
 
 -- Правая колонка
 Main:Column("right")
-local Visuals = Main:CreateSection({ Name = "Visuals" })
+local Visuals = Main:CreateSection({ Name = "Visuals", Collapsible = true })
 
-Visuals:AddToggle({
+local esp = Visuals:AddToggle({
     Name = "ESP",
     Default = true,
-    Flag = "ESP",
 })
 
-Visuals:AddColorPicker({
-    Name = "ESP Color",
-    Default = Color3.fromRGB(0, 255, 0),
-    Flag = "ESPColor",
+-- Добавляем суб-элементы к тогглу ESP:
+esp:AddColorPicker({
+    Default = Color3.fromRGB(0, 255, 134),
+    Callback = function(col) print("ESP Color:", col) end,
+})
+
+esp:AddKeybind({
+    Default = Enum.KeyCode.X,
+    Mode = "Toggle", -- ПКМ для переключения Toggle / Hold / Always
 })
 
 Window:AddSettingsTab()
@@ -320,7 +433,13 @@ Window:Notify({
 Нажми кнопку **OPEN** или назначь клавишу в Settings → Menu Toggle.
 
 **Почему не сохраняется конфиг?**
-Убедись, что у элемента есть `Flag`, и что исполнитель поддерживает `writefile`.
+Убедись, что исполнитель поддерживает `writefile` / `readfile`. Все функции теперь сохраняются автоматически по имени (`Name`)!
+
+**Как сменить режим кейбинда?**
+Нажми **ПКМ (правой кнопкой мыши)** по кнопке кейбинда, чтобы переключить режим между `Toggle`, `Hold` и `Always`.
+
+**Можно ли сворачивать секции?**
+Да! Просто кликни по заголовку любой секции.
 
 **Можно ли менять размер окна?**
 Да — тяни за края окна.
@@ -341,12 +460,16 @@ Window:CreateTab({...})
 Window:Notify({...})
 Window:AddSettingsTab()
 Window:Toggle(true/false)
+Window:GetFastMenu()
+Window:GetKeybindList()
 
 -- Tab
 Tab:Column("left"/"right")
 Tab:CreateSection({...})
 
 -- Section
+Section:SetCollapsed(bool)
+Section:IsCollapsed()
 Section:AddButton({...})
 Section:AddLabel(text)
 Section:AddToggle({...})
@@ -357,12 +480,26 @@ Section:AddTextbox({...})
 Section:AddKeybind({...})
 Section:AddColorPicker({...})
 
+-- Toggle Sub-elements
+local cp = toggle:AddColorPicker({...})
+local kb = toggle:AddKeybind({...})
+
+-- Keybind Object
+kb.Set(Enum.KeyCode.F)
+kb.SetMode("Hold")
+kb.Get()
+kb.GetMode()
+kb.GetActive()
+
 -- Library
 Library:SaveConfig(name)
 Library:LoadConfig(name)
 Library:DeleteConfig(name)
 Library:GetConfigs()
 Library:SetAutoLoad(name)
+Library:GetConfig()
+Library:ApplyConfig(data)
+Library:RegisterFunction(name, getter, setter)
 ```
 
 ---
