@@ -1253,6 +1253,48 @@ function Library:CreateWindow(cfg)
         return nil
     end
 
+    Window._buttons = {}
+    Window._buttonOrder = {}
+    Window._fastMenuSelectedButtons = {}
+
+    Window._registerButton = function(key, data)
+        if not Window._buttons[key] then
+            table.insert(Window._buttonOrder, key)
+        end
+        Window._buttons[key] = data
+        if Window._fastButtonMultiDropdown then
+            Window._fastButtonMultiDropdown.Refresh(Window._getButtonNames(), true)
+        end
+        if Window._refreshFastMenu and Window._fastMenuVisible then
+            Window._refreshFastMenu()
+        end
+    end
+
+    Window._getButtonNames = function()
+        local list = {}
+        for _, k in ipairs(Window._buttonOrder) do
+            local b = Window._buttons[k]
+            if b then table.insert(list, b.Name or k) end
+        end
+        return list
+    end
+
+    Window._findButtonByName = function(name)
+        for _, b in pairs(Window._buttons) do
+            if b.Name == name or b.Key == name then
+                return b
+            end
+        end
+        return nil
+    end
+
+    Window._setFastMenuButtons = function(list)
+        Window._fastMenuSelectedButtons = list or {}
+        if Window._fastMenuVisible then
+            Window._refreshFastMenu()
+        end
+    end
+
     local fastFrame = create("Frame", {
         Name = "FastMenu",
         BackgroundColor3 = Theme.Bg,
@@ -1484,6 +1526,94 @@ function Library:CreateWindow(cfg)
             end
         end
 
+        local selectedButtons = Window._fastMenuSelectedButtons or {}
+        for _, item in ipairs(selectedButtons) do
+            local buttonObj = Window._findButtonByName(item)
+            if buttonObj then
+                count = count + 1
+                local isPrimary = buttonObj.Primary == true
+                local row = create("Frame", {
+                    Name = "BtnRow_" .. (buttonObj.Key or count),
+                    BackgroundColor3 = isPrimary and Theme.Accent or Theme.Element,
+                    BackgroundTransparency = isPrimary and 0.15 or 0.35,
+                    Size = UDim2.new(1, 0, 0, 28),
+                    LayoutOrder = count,
+                    Parent = fastContent,
+                })
+                corner(row, 6)
+                local rowStrk = stroke(row, isPrimary and Theme.Accent or Theme.StrokeLight, 1, isPrimary and 0.1 or 0.3)
+                if isPrimary then registerAccent(row, "BackgroundColor3") end
+
+                local iconOffset = 8
+                if buttonObj.Icon then
+                    local ic = create("ImageLabel", {
+                        BackgroundTransparency = 1,
+                        ImageColor3 = isPrimary and Theme.Bg or Theme.SubText,
+                        Position = UDim2.fromOffset(8, 6),
+                        Size = UDim2.fromOffset(16, 16),
+                        Parent = row,
+                    })
+                    applyIcon(ic, buttonObj.Icon)
+                    iconOffset = 28
+                end
+
+                local titleLbl = create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(iconOffset, 0),
+                    Size = UDim2.new(1, -(iconOffset + 26), 1, 0),
+                    Text = buttonObj.Name,
+                    TextColor3 = isPrimary and Theme.Bg or Theme.Text,
+                    Font = Theme.FontMed,
+                    TextSize = 12,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Parent = row,
+                })
+
+                local actionIcon = create("ImageLabel", {
+                    Name = "ActionIcon",
+                    BackgroundTransparency = 1,
+                    ImageColor3 = isPrimary and Theme.Bg or Theme.SubText,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -8, 0.5, 0),
+                    Size = UDim2.fromOffset(12, 12),
+                    Parent = row,
+                })
+                applyIcon(actionIcon, "play")
+
+                local clickBtn = create("TextButton", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Text = "",
+                    Parent = row,
+                })
+                addClickEffect(clickBtn, 0.96)
+                ripple(clickBtn)
+
+                clickBtn.MouseEnter:Connect(function()
+                    tween(row, TW.Fast, { BackgroundTransparency = isPrimary and 0.05 or 0.15 })
+                    if not isPrimary then
+                        tween(titleLbl, TW.Fast, { TextColor3 = Theme.Accent })
+                        tween(actionIcon, TW.Fast, { ImageColor3 = Theme.Accent })
+                    end
+                end)
+                clickBtn.MouseLeave:Connect(function()
+                    tween(row, TW.Fast, { BackgroundTransparency = isPrimary and 0.15 or 0.35 })
+                    if not isPrimary then
+                        tween(titleLbl, TW.Fast, { TextColor3 = Theme.Text })
+                        tween(actionIcon, TW.Fast, { ImageColor3 = Theme.SubText })
+                    end
+                end)
+                clickBtn.MouseButton1Click:Connect(function()
+                    if buttonObj.Callback then
+                        task.spawn(buttonObj.Callback)
+                    end
+                end)
+
+                table.insert(activeRows, { Frame = row })
+            end
+        end
+
         fastEmptyLbl.Visible = (count == 0)
     end
 
@@ -1569,6 +1699,17 @@ function Library:CreateWindow(cfg)
         Window._setFastMenuPosition(v)
     end)
 
+    Library:RegisterFunction("_FastMenuButtons", function()
+        return Window._fastMenuSelectedButtons
+    end, function(v)
+        if type(v) == "table" then
+            Window._setFastMenuButtons(v)
+            if Window._fastButtonMultiDropdown then
+                Window._fastButtonMultiDropdown.Set(v)
+            end
+        end
+    end)
+
     function Window:GetFastMenu()
         return {
             Gui = fastFrame,
@@ -1578,6 +1719,7 @@ function Library:CreateWindow(cfg)
             SetPosition = Window._setFastMenuPosition,
             GetPosition = Window._getFastMenuPosition,
             SetToggles = Window._setFastMenuToggles,
+            SetButtons = Window._setFastMenuButtons,
             Refresh = Window._refreshFastMenu,
         }
     end
@@ -2222,7 +2364,33 @@ function Library:CreateWindow(cfg)
                 btn.MouseButton1Click:Connect(function()
                     if o.Callback then task.spawn(o.Callback) end
                 end)
-                return { SetText = function(t) btn.Text = t end }
+
+                local btnName = o.Name or "Button"
+                local btnKey = o.Flag or ((secCfg and secCfg.Name or "Section") .. "/" .. btnName)
+                if not o.NoFastMenu and Window._registerButton then
+                    Window._registerButton(btnKey, {
+                        Name = btnName,
+                        Key = btnKey,
+                        Icon = o.Icon,
+                        Primary = o.Primary,
+                        Callback = o.Callback,
+                    })
+                end
+
+                return {
+                    SetText = function(t)
+                        btn.Text = t
+                        if Window._buttons and Window._buttons[btnKey] then
+                            Window._buttons[btnKey].Name = t
+                            if Window._fastButtonMultiDropdown then
+                                Window._fastButtonMultiDropdown.Refresh(Window._getButtonNames(), true)
+                            end
+                            if Window._refreshFastMenu and Window._fastMenuVisible then
+                                Window._refreshFastMenu()
+                            end
+                        end
+                    end
+                }
             end
 
             --=====================================================================--
@@ -3426,6 +3594,7 @@ function Library:CreateWindow(cfg)
 
         theme:AddButton({
             Name = "Reset Window Size",
+            NoFastMenu = true,
             Callback = function()
                 Window:SetSize(600, 340, true)
                 Window:Notify({ Title = "Window", Content = "Size reset to 600x340.", Type = "Info", Duration = 1.5 })
@@ -3434,13 +3603,13 @@ function Library:CreateWindow(cfg)
 
         --========================= ACTIONS =========================--
         local actions = tab:CreateSection({ Name = "Actions" })
-        actions:AddButton({ Name = "Unload Menu", Callback = function()
+        actions:AddButton({ Name = "Unload Menu", NoFastMenu = true, Callback = function()
             Window.Gui:Destroy()
         end })
-        actions:AddButton({ Name = "Rejoin Server", Callback = function()
+        actions:AddButton({ Name = "Rejoin Server", NoFastMenu = true, Callback = function()
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end })
-        actions:AddButton({ Name = "Server Hop", Primary = true, Callback = function()
+        actions:AddButton({ Name = "Server Hop", Primary = true, NoFastMenu = true, Callback = function()
             Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
             local ok, servers = pcall(function()
                 local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
@@ -3484,6 +3653,18 @@ function Library:CreateWindow(cfg)
         })
         Window._fastMultiDropdown = multiDrop
 
+        local btnMultiDrop = fastSec:AddMultiDropdown({
+            Name = "Select Buttons",
+            Options = Window._getButtonNames(),
+            Default = Window._fastMenuSelectedButtons,
+            Placeholder = "Choose buttons...",
+            Flag = "_FastMenuButtons",
+            Callback = function(list)
+                Window._setFastMenuButtons(list)
+            end,
+        })
+        Window._fastButtonMultiDropdown = btnMultiDrop
+
         fastSec:AddSlider({
             Name = "Menu Scale",
             Min = 50,
@@ -3508,6 +3689,7 @@ function Library:CreateWindow(cfg)
 
         fastSec:AddButton({
             Name = "Reset Position",
+            NoFastMenu = true,
             Callback = function()
                 Window._setFastMenuPosition(UDim2.new(0, 30, 0.35, 0))
                 Window:Notify({ Title = "Fast Menu", Content = "Position reset to default.", Type = "Info", Duration = 1.5 })
@@ -3551,6 +3733,7 @@ function Library:CreateWindow(cfg)
 
         kbSec:AddButton({
             Name = "Reset Position",
+            NoFastMenu = true,
             Callback = function()
                 Window._setKeybindListPosition(UDim2.new(0, 30, 0.62, 0))
                 Window:Notify({ Title = "Keybind List", Content = "Position reset to default.", Type = "Info", Duration = 1.5 })
@@ -3563,7 +3746,7 @@ function Library:CreateWindow(cfg)
 
         local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config", NoConfig = true })
 
-        cfgSec:AddButton({ Name = "Create Config", Primary = true, Callback = function()
+        cfgSec:AddButton({ Name = "Create Config", Primary = true, NoFastMenu = true, Callback = function()
             local n = nameBox.Get()
             n = (n or ""):gsub("[^%w_%- ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
             if n == "" then
@@ -3587,7 +3770,7 @@ function Library:CreateWindow(cfg)
             NoConfig = true,
         })
 
-        cfgSec:AddButton({ Name = "Load", Callback = function()
+        cfgSec:AddButton({ Name = "Load", NoFastMenu = true, Callback = function()
             local n = cfgDrop.Get()
             if n and n ~= "" then
                 if Library:LoadConfig(n) then
@@ -3600,7 +3783,7 @@ function Library:CreateWindow(cfg)
             end
         end })
 
-        cfgSec:AddButton({ Name = "Overwrite", Callback = function()
+        cfgSec:AddButton({ Name = "Overwrite", NoFastMenu = true, Callback = function()
             local n = cfgDrop.Get()
             if n and n ~= "" then
                 Library:SaveConfig(n)
@@ -3610,7 +3793,7 @@ function Library:CreateWindow(cfg)
             end
         end })
 
-        cfgSec:AddButton({ Name = "Delete", Callback = function()
+        cfgSec:AddButton({ Name = "Delete", NoFastMenu = true, Callback = function()
             local n = cfgDrop.Get()
             if n and n ~= "" then
                 Library:DeleteConfig(n)
@@ -3622,7 +3805,7 @@ function Library:CreateWindow(cfg)
             end
         end })
 
-        cfgSec:AddButton({ Name = "Set Auto-Load", Callback = function()
+        cfgSec:AddButton({ Name = "Set Auto-Load", NoFastMenu = true, Callback = function()
             local n = cfgDrop.Get()
             if n and n ~= "" then
                 Library:SetAutoLoad(n)
@@ -3633,13 +3816,13 @@ function Library:CreateWindow(cfg)
             end
         end })
 
-        cfgSec:AddButton({ Name = "Clear Auto-Load", Callback = function()
+        cfgSec:AddButton({ Name = "Clear Auto-Load", NoFastMenu = true, Callback = function()
             Library:ClearAutoLoad()
             autoLabel.Set("Auto-Load: none")
             Window:Notify({ Title = "Config", Content = "Auto-load cleared.", Type = "Info" })
         end })
 
-        cfgSec:AddButton({ Name = "Refresh List", Callback = function()
+        cfgSec:AddButton({ Name = "Refresh List", NoFastMenu = true, Callback = function()
             cfgDrop.Refresh(Library:GetConfigs())
             Window:Notify({ Title = "Config", Content = "List refreshed.", Type = "Info" })
         end })
