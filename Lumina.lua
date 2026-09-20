@@ -45,6 +45,7 @@ end
 local Theme = {
     Bg          = Color3.fromRGB(8, 8, 8),
     Bg2         = Color3.fromRGB(14, 15, 14),
+    Header      = Color3.fromRGB(14, 15, 14),
     Section     = Color3.fromRGB(18, 20, 19),
     Element     = Color3.fromRGB(22, 24, 23),
     Stroke      = Color3.fromRGB(25, 30, 28),
@@ -219,7 +220,10 @@ local Library = {}
 Library.__index = Library
 Library.AccentObjects = {}   -- objects that follow accent color
 Library.AccentRepainters = {} -- callbacks invoked on accent change
-Library.Flags = {}           -- central state table
+Library.Flags = {}           -- central state table (compat with flags & element names)
+Library.Functions = Library.Flags -- alias so functions can be accessed as Library.Functions
+Library.Elements = Library.Flags  -- alias so elements can be accessed as Library.Elements
+Library.ConfigRegistry = {}       -- canonical registry of all saved functions/elements
 
 local function registerAccent(obj, prop)
     table.insert(Library.AccentObjects, { obj = obj, prop = prop })
@@ -280,29 +284,70 @@ local function deserialize(v)
     return v
 end
 
-function Library:SaveConfig(name)
-    if not hasFS or name == "" then return false end
+-- Регистрация пользовательской функции или геттера/сеттера в систему конфигов
+function Library:RegisterFunction(name, getter, setter)
+    if not name or name == "" then return end
+    local entry
+    if type(getter) == "table" and (getter.Get or getter.Set) then
+        entry = getter
+    elseif type(getter) == "function" and type(setter) == "function" then
+        entry = { Get = getter, Set = setter }
+    elseif type(getter) == "function" and setter == nil then
+        -- Единая функция: fn() -> get, fn(v) -> set
+        entry = {
+            Get = function() return getter() end,
+            Set = function(v) return getter(v) end,
+        }
+    end
+    if entry then
+        entry.Name = name
+        Library.ConfigRegistry[name] = entry
+        Library.Flags[name] = entry
+    end
+    return entry
+end
+Library.RegisterConfig = Library.RegisterFunction
+
+-- Получить все настройки в виде таблицы Lua
+function Library:GetConfig()
     local out = {}
-    for flag, obj in pairs(Library.Flags) do
+    local source = next(Library.ConfigRegistry) ~= nil and Library.ConfigRegistry or Library.Flags
+    for key, obj in pairs(source) do
         if obj.Get then
             local ok, val = pcall(obj.Get)
-            if ok then out[flag] = serialize(val) end
+            if ok and val ~= nil then
+                out[key] = serialize(val)
+            end
         end
     end
+    return out
+end
+
+-- Применить настройки из таблицы Lua
+function Library:ApplyConfig(data)
+    if type(data) ~= "table" then return false end
+    for key, val in pairs(data) do
+        local obj = Library.ConfigRegistry[key] or Library.Flags[key]
+        if obj and obj.Set then
+            pcall(obj.Set, deserialize(val))
+        end
+    end
+    return true
+end
+
+function Library:SaveConfig(name)
+    if not hasFS or not name or name == "" then return false end
+    local out = Library:GetConfig()
     return pcall(writefile, CFG_DIR.."/"..name..".json", HttpService:JSONEncode(out))
 end
 
 function Library:LoadConfig(name)
-    if not hasFS then return false end
+    if not hasFS or not name or name == "" then return false end
     local path = CFG_DIR.."/"..name..".json"
-    if not isfile(path) then return false end
+    if isfile and not isfile(path) then return false end
     local ok, data = pcall(function() return HttpService:JSONDecode(readfile(path)) end)
-    if ok and data then
-        for flag, val in pairs(data) do
-            local obj = Library.Flags[flag]
-            if obj and obj.Set then pcall(obj.Set, deserialize(val)) end
-        end
-        return true
+    if ok and type(data) == "table" then
+        return Library:ApplyConfig(data)
     end
     return false
 end
@@ -943,6 +988,572 @@ function Library:CreateWindow(cfg)
     end
 
     --===============================================================================--
+    --                              FAST MENU HUD                                    --
+    --===============================================================================--
+    Window._toggles = {}
+    Window._toggleOrder = {}
+    Window._fastMenuSelectedToggles = {}
+    Window._fastMenuScale = 1
+    Window._fastMenuLocked = false
+    Window._fastMenuVisible = false
+
+    Window._registerToggle = function(key, data)
+        if not Window._toggles[key] then
+            table.insert(Window._toggleOrder, key)
+        end
+        Window._toggles[key] = data
+        if Window._fastMultiDropdown then
+            Window._fastMultiDropdown.Refresh(Window._getToggleNames(), true)
+        end
+        if Window._refreshFastMenu and Window._fastMenuVisible then
+            Window._refreshFastMenu()
+        end
+    end
+
+    Window._getToggleNames = function()
+        local list = {}
+        for _, k in ipairs(Window._toggleOrder) do
+            local t = Window._toggles[k]
+            if t then table.insert(list, t.Name or k) end
+        end
+        return list
+    end
+
+    Window._findToggleByName = function(name)
+        for _, t in pairs(Window._toggles) do
+            if t.Name == name or t.Key == name then
+                return t
+            end
+        end
+        return nil
+    end
+
+    local fastFrame = create("Frame", {
+        Name = "FastMenu",
+        BackgroundColor3 = Theme.Bg,
+        BackgroundTransparency = 0.05,
+        Position = UDim2.new(0, 30, 0.35, 0),
+        Size = UDim2.fromOffset(210, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Visible = false,
+        ZIndex = 100,
+        Parent = gui,
+    })
+    corner(fastFrame, 10)
+    local fastStroke = stroke(fastFrame, Theme.StrokeLight, 1, 0.3)
+    local fastScale = create("UIScale", { Scale = 1, Parent = fastFrame })
+
+    local fastHeader = create("Frame", {
+        Name = "Header",
+        BackgroundColor3 = Theme.Header,
+        BackgroundTransparency = 0.2,
+        Size = UDim2.new(1, 0, 0, 30),
+        Parent = fastFrame,
+    })
+    corner(fastHeader, 10)
+    create("Frame", {
+        Name = "HeaderFill",
+        BackgroundColor3 = Theme.Header,
+        BackgroundTransparency = 0.2,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 0, 1, -6),
+        Size = UDim2.new(1, 0, 0, 6),
+        Parent = fastHeader,
+    })
+
+    local fastIcon = create("ImageLabel", {
+        Name = "Icon",
+        BackgroundTransparency = 1,
+        ImageColor3 = Theme.Accent,
+        Position = UDim2.fromOffset(8, 7),
+        Size = UDim2.fromOffset(16, 16),
+        Parent = fastHeader,
+    })
+    applyIcon(fastIcon, "zap")
+    registerAccent(fastIcon, "ImageColor3")
+
+    create("TextLabel", {
+        Name = "Title",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(28, 0),
+        Size = UDim2.new(1, -60, 1, 0),
+        Text = "Fast Menu",
+        TextColor3 = Theme.Text,
+        Font = Theme.FontBold,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = fastHeader,
+    })
+
+    local fastLockBadge = create("TextLabel", {
+        Name = "LockBadge",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -8, 0.5, 0),
+        Size = UDim2.fromOffset(20, 20),
+        Text = "",
+        TextColor3 = Theme.SubText,
+        Font = Theme.Font,
+        TextSize = 12,
+        Visible = false,
+        Parent = fastHeader,
+    })
+
+    local fastContent = create("Frame", {
+        Name = "Content",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 30),
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = fastFrame,
+    })
+    padding(fastContent, nil, 6, 6, 8, 8)
+    create("UIListLayout", {
+        Padding = UDim.new(0, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = fastContent,
+    })
+
+    local fastEmptyLbl = create("TextLabel", {
+        Name = "EmptyLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 24),
+        Text = "No functions selected",
+        TextColor3 = Theme.SubText,
+        Font = Theme.Font,
+        TextSize = 12,
+        Visible = true,
+        Parent = fastContent,
+    })
+
+    -- Dragging logic
+    do
+        local dragging = false
+        local dragStart, startPos
+
+        fastHeader.InputBegan:Connect(function(i)
+            if Window._fastMenuLocked then return end
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = Vector2.new(i.Position.X, i.Position.Y)
+                startPos = fastFrame.Position
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(i)
+            if dragging and not Window._fastMenuLocked and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local dx = i.Position.X - dragStart.X
+                local dy = i.Position.Y - dragStart.Y
+                fastFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + dx, startPos.Y.Scale, startPos.Y.Offset + dy)
+            end
+        end)
+
+        UserInputService.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+    end
+
+    local activeRows = {}
+
+    Window._refreshFastMenu = function()
+        for _, rowObj in ipairs(activeRows) do
+            if rowObj.Frame and rowObj.Frame.Parent then
+                rowObj.Frame:Destroy()
+            end
+        end
+        activeRows = {}
+
+        local selected = Window._fastMenuSelectedToggles or {}
+        local count = 0
+
+        for _, item in ipairs(selected) do
+            local toggleObj = Window._findToggleByName(item)
+            if toggleObj then
+                count = count + 1
+                local row = create("Frame", {
+                    Name = "Row_" .. (toggleObj.Key or count),
+                    BackgroundColor3 = Theme.Element,
+                    BackgroundTransparency = 0.4,
+                    Size = UDim2.new(1, 0, 0, 30),
+                    LayoutOrder = count,
+                    Parent = fastContent,
+                })
+                corner(row, 6)
+                stroke(row, Theme.StrokeLight, 1, 0.3)
+
+                local iconOffset = 8
+                if toggleObj.Icon then
+                    local ic = create("ImageLabel", {
+                        BackgroundTransparency = 1,
+                        ImageColor3 = Theme.SubText,
+                        Position = UDim2.fromOffset(8, 7),
+                        Size = UDim2.fromOffset(16, 16),
+                        Parent = row,
+                    })
+                    applyIcon(ic, toggleObj.Icon)
+                    iconOffset = 28
+                end
+
+                create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(iconOffset, 0),
+                    Size = UDim2.new(1, -(iconOffset + 44), 1, 0),
+                    Text = toggleObj.Name,
+                    TextColor3 = Theme.Text,
+                    Font = Theme.Font,
+                    TextSize = 12,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Parent = row,
+                })
+
+                local curState = toggleObj.Get()
+                local miniTrack = create("Frame", {
+                    BackgroundColor3 = curState and Theme.Accent or Theme.ToggleOff,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -6, 0.5, 0),
+                    Size = UDim2.fromOffset(34, 18),
+                    Parent = row,
+                })
+                corner(miniTrack, 9)
+                local miniKnob = create("Frame", {
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = curState and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+                    Size = UDim2.fromOffset(14, 14),
+                    Parent = miniTrack,
+                })
+                corner(miniKnob, 7)
+
+                if curState then registerAccent(miniTrack, "BackgroundColor3") end
+
+                local function updateMiniUI(v)
+                    curState = v
+                    tween(miniTrack, TW.Fast, { BackgroundColor3 = v and Theme.Accent or Theme.ToggleOff })
+                    tween(miniKnob, TW.Spring, { Position = v and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0) })
+                    if v then registerAccent(miniTrack, "BackgroundColor3") end
+                end
+
+                toggleObj.AddListener(updateMiniUI)
+
+                local clickBtn = create("TextButton", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Text = "",
+                    Parent = row,
+                })
+
+                clickBtn.MouseEnter:Connect(function()
+                    tween(row, TW.Fast, { BackgroundTransparency = 0.2 })
+                end)
+                clickBtn.MouseLeave:Connect(function()
+                    tween(row, TW.Fast, { BackgroundTransparency = 0.4 })
+                end)
+                clickBtn.MouseButton1Click:Connect(function()
+                    toggleObj.Set(not toggleObj.Get())
+                end)
+
+                table.insert(activeRows, { Frame = row, Update = updateMiniUI })
+            end
+        end
+
+        fastEmptyLbl.Visible = (count == 0)
+    end
+
+    Window._setFastMenuVisible = function(v)
+        Window._fastMenuVisible = v
+        if v then
+            Window._refreshFastMenu()
+            fastFrame.Visible = true
+        else
+            fastFrame.Visible = false
+        end
+    end
+
+    Window._setFastMenuScale = function(s)
+        Window._fastMenuScale = s
+        fastScale.Scale = s
+    end
+
+    Window._setFastMenuLocked = function(v)
+        Window._fastMenuLocked = v
+        fastLockBadge.Text = v and "🔒" or ""
+        fastLockBadge.Visible = v
+    end
+
+    Window._setFastMenuToggles = function(list)
+        Window._fastMenuSelectedToggles = list or {}
+        if Window._fastMenuVisible then
+            Window._refreshFastMenu()
+        end
+    end
+
+    function Window:GetFastMenu()
+        return {
+            Gui = fastFrame,
+            SetVisible = Window._setFastMenuVisible,
+            SetScale = Window._setFastMenuScale,
+            SetLocked = Window._setFastMenuLocked,
+            SetToggles = Window._setFastMenuToggles,
+            Refresh = Window._refreshFastMenu,
+        }
+    end
+
+    --===============================================================================--
+    --                            KEYBIND LIST HUD                                   --
+    --===============================================================================--
+    Window._keybinds = {}
+    Window._keybindListScale = 1
+    Window._keybindListLocked = false
+    Window._keybindListVisible = false
+
+    Window._notifyKeybindMode = function(name, mode)
+        Window:Notify({
+            Title = "Keybind Mode",
+            Content = (name or "Keybind") .. ": " .. mode,
+            Type = "Info",
+            Duration = 1.5,
+        })
+    end
+
+    Window._registerKeybind = function(data)
+        table.insert(Window._keybinds, data)
+        if Window._refreshKeybindList and Window._keybindListVisible then
+            Window._refreshKeybindList()
+        end
+    end
+
+    local kbFrame = create("Frame", {
+        Name = "KeybindList",
+        BackgroundColor3 = Theme.Bg,
+        BackgroundTransparency = 0.05,
+        Position = UDim2.new(0, 30, 0.62, 0),
+        Size = UDim2.fromOffset(210, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Visible = false,
+        ZIndex = 100,
+        Parent = gui,
+    })
+    corner(kbFrame, 10)
+    local kbStroke = stroke(kbFrame, Theme.StrokeLight, 1, 0.3)
+    local kbScale = create("UIScale", { Scale = 1, Parent = kbFrame })
+
+    local kbHeader = create("Frame", {
+        Name = "Header",
+        BackgroundColor3 = Theme.Header,
+        BackgroundTransparency = 0.2,
+        Size = UDim2.new(1, 0, 0, 30),
+        Parent = kbFrame,
+    })
+    corner(kbHeader, 10)
+    create("Frame", {
+        Name = "HeaderFill",
+        BackgroundColor3 = Theme.Header,
+        BackgroundTransparency = 0.2,
+        BorderSizePixel = 0,
+        Position = UDim2.new(0, 0, 1, -6),
+        Size = UDim2.new(1, 0, 0, 6),
+        Parent = kbHeader,
+    })
+
+    local kbIcon = create("ImageLabel", {
+        Name = "Icon",
+        BackgroundTransparency = 1,
+        ImageColor3 = Theme.Accent,
+        Position = UDim2.fromOffset(8, 7),
+        Size = UDim2.fromOffset(16, 16),
+        Parent = kbHeader,
+    })
+    applyIcon(kbIcon, "keyboard")
+    registerAccent(kbIcon, "ImageColor3")
+
+    create("TextLabel", {
+        Name = "Title",
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(28, 0),
+        Size = UDim2.new(1, -60, 1, 0),
+        Text = "Keybinds",
+        TextColor3 = Theme.Text,
+        Font = Theme.FontBold,
+        TextSize = 13,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = kbHeader,
+    })
+
+    local kbLockBadge = create("TextLabel", {
+        Name = "LockBadge",
+        BackgroundTransparency = 1,
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -8, 0.5, 0),
+        Size = UDim2.fromOffset(20, 20),
+        Text = "",
+        TextColor3 = Theme.SubText,
+        Font = Theme.Font,
+        TextSize = 12,
+        Visible = false,
+        Parent = kbHeader,
+    })
+
+    local kbContent = create("Frame", {
+        Name = "Content",
+        BackgroundTransparency = 1,
+        Position = UDim2.new(0, 0, 0, 30),
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Parent = kbFrame,
+    })
+    padding(kbContent, nil, 6, 6, 8, 8)
+    create("UIListLayout", {
+        Padding = UDim.new(0, 4),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = kbContent,
+    })
+
+    local kbEmptyLbl = create("TextLabel", {
+        Name = "EmptyLabel",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 24),
+        Text = "No active keybinds",
+        TextColor3 = Theme.SubText,
+        Font = Theme.Font,
+        TextSize = 12,
+        Visible = true,
+        Parent = kbContent,
+    })
+
+    -- Dragging logic
+    do
+        local dragging = false
+        local dragStart, startPos
+
+        kbHeader.InputBegan:Connect(function(i)
+            if Window._keybindListLocked then return end
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = Vector2.new(i.Position.X, i.Position.Y)
+                startPos = kbFrame.Position
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(i)
+            if dragging and not Window._keybindListLocked and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+                local dx = i.Position.X - dragStart.X
+                local dy = i.Position.Y - dragStart.Y
+                kbFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + dx, startPos.Y.Scale, startPos.Y.Offset + dy)
+            end
+        end)
+
+        UserInputService.InputEnded:Connect(function(i)
+            if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                dragging = false
+            end
+        end)
+    end
+
+    local activeKbRows = {}
+
+    Window._refreshKeybindList = function()
+        for _, rowObj in ipairs(activeKbRows) do
+            if rowObj and rowObj.Parent then
+                rowObj:Destroy()
+            end
+        end
+        activeKbRows = {}
+
+        local count = 0
+        for _, kb in ipairs(Window._keybinds) do
+            local key = kb.GetKey and kb.GetKey()
+            if key then
+                count = count + 1
+                local mode = kb.GetMode and kb.GetMode() or "Toggle"
+                local isActive = kb.GetActive and kb.GetActive() or false
+
+                local row = create("Frame", {
+                    Name = "Row_" .. count,
+                    BackgroundColor3 = Theme.Element,
+                    BackgroundTransparency = 0.4,
+                    Size = UDim2.new(1, 0, 0, 26),
+                    LayoutOrder = count,
+                    Parent = kbContent,
+                })
+                corner(row, 6)
+                local rowStroke = stroke(row, isActive and Theme.Accent or Theme.StrokeLight, 1, isActive and 0 or 0.3)
+                if isActive then registerAccent(rowStroke, "Color") end
+
+                create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(8, 0),
+                    Size = UDim2.new(1, -95, 1, 0),
+                    Text = kb.Name or "Keybind",
+                    TextColor3 = isActive and Theme.Text or Theme.SubText,
+                    Font = Theme.Font,
+                    TextSize = 12,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Parent = row,
+                })
+
+                local keyName = key.Name or tostring(key)
+                if #keyName > 6 then keyName = keyName:sub(1, 5) .. ".." end
+
+                local modeShort = (mode == "Toggle" and "T") or (mode == "Hold" and "H") or "A"
+                local badgeText = string.format("[%s] [%s]", keyName, modeShort)
+
+                local badgeLbl = create("TextLabel", {
+                    BackgroundTransparency = 1,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -8, 0.5, 0),
+                    Size = UDim2.fromOffset(85, 20),
+                    Text = badgeText,
+                    TextColor3 = isActive and Theme.Accent or Theme.SubText,
+                    Font = Theme.FontMed,
+                    TextSize = 11,
+                    TextXAlignment = Enum.TextXAlignment.Right,
+                    Parent = row,
+                })
+                if isActive then registerAccent(badgeLbl, "TextColor3") end
+
+                table.insert(activeKbRows, row)
+            end
+        end
+
+        kbEmptyLbl.Visible = (count == 0)
+    end
+
+    Window._setKeybindListVisible = function(v)
+        Window._keybindListVisible = v
+        if v then
+            Window._refreshKeybindList()
+            kbFrame.Visible = true
+        else
+            kbFrame.Visible = false
+        end
+    end
+
+    Window._setKeybindListScale = function(s)
+        Window._keybindListScale = s
+        kbScale.Scale = s
+    end
+
+    Window._setKeybindListLocked = function(v)
+        Window._keybindListLocked = v
+        kbLockBadge.Text = v and "🔒" or ""
+        kbLockBadge.Visible = v
+    end
+
+    function Window:GetKeybindList()
+        return {
+            Gui = kbFrame,
+            SetVisible = Window._setKeybindListVisible,
+            SetScale = Window._setKeybindListScale,
+            SetLocked = Window._setKeybindListLocked,
+            Refresh = Window._refreshKeybindList,
+        }
+    end
+
+    --===============================================================================--
     --                              CREATE TAB                                         --
     --===============================================================================--
     function Window:CreateTab(tabCfg)
@@ -1077,23 +1688,68 @@ function Library:CreateWindow(cfg)
             secCfg = secCfg or {}
             local Section = {}
             local parent = getParent()
+            local collapsible = secCfg.Collapsible ~= false
+            local collapsed = secCfg.Collapsed == true
 
-            -- header title above the box (like "PLAYER MODULE")
-            local titleLbl = create("TextLabel", {
+            local header = create("Frame", {
+                Name = "SectionHeader",
                 BackgroundTransparency = 1,
-                Size = UDim2.new(1, 0, 0, 18),
-                Text = string.upper(secCfg.Name or "SECTION"),
-                TextColor3 = Theme.Text, Font = Theme.FontBold, TextSize = 14,
-                TextXAlignment = Enum.TextXAlignment.Left,
+                Size = UDim2.new(1, 0, 0, 20),
                 LayoutOrder = #parent:GetChildren(),
                 Parent = parent,
             })
+
+            local titleLbl = create("TextLabel", {
+                Name = "Title",
+                BackgroundTransparency = 1,
+                Position = UDim2.new(0, 0, 0, 0),
+                Size = UDim2.new(1, collapsible and -24 or 0, 1, 0),
+                Text = string.upper(secCfg.Name or "SECTION"),
+                TextColor3 = Theme.Text, Font = Theme.FontBold, TextSize = 14,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Parent = header,
+            })
+
+            local chevron
+            if collapsible then
+                chevron = create("ImageLabel", {
+                    Name = "Chevron",
+                    BackgroundTransparency = 1,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(16, 16),
+                    ImageColor3 = Theme.SubText,
+                    Rotation = collapsed and -90 or 0,
+                    Parent = header,
+                })
+                applyIcon(chevron, "chevron-down")
+
+                local headerBtn = create("TextButton", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Text = "",
+                    Parent = header,
+                })
+
+                headerBtn.MouseEnter:Connect(function()
+                    tween(titleLbl, TW.Fast, { TextColor3 = Theme.Accent })
+                    tween(chevron, TW.Fast, { ImageColor3 = Theme.Text })
+                end)
+                headerBtn.MouseLeave:Connect(function()
+                    tween(titleLbl, TW.Fast, { TextColor3 = Theme.Text })
+                    tween(chevron, TW.Fast, { ImageColor3 = Theme.SubText })
+                end)
+                headerBtn.MouseButton1Click:Connect(function()
+                    Section:SetCollapsed(not collapsed)
+                end)
+            end
 
             local box = create("Frame", {
                 BackgroundColor3 = Theme.Section,
                 Size = UDim2.new(1, 0, 0, 0),
                 AutomaticSize = Enum.AutomaticSize.Y,
-                LayoutOrder = titleLbl.LayoutOrder + 1,
+                Visible = not collapsed,
+                LayoutOrder = header.LayoutOrder + 1,
                 Parent = parent,
             })
             corner(box, 12)
@@ -1103,6 +1759,24 @@ function Library:CreateWindow(cfg)
             create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = box })
 
             Section._box = box
+            Section._header = header
+
+            function Section:SetCollapsed(val, fireCallback)
+                if not collapsible then return end
+                collapsed = val == true
+                if chevron then
+                    tween(chevron, TW.Fast, { Rotation = collapsed and -90 or 0 })
+                end
+                box.Visible = not collapsed
+                if fireCallback ~= false and secCfg.Callback then
+                    task.spawn(secCfg.Callback, collapsed)
+                end
+            end
+
+            function Section:IsCollapsed()
+                return collapsed
+            end
+
             local function nextOrder() return #box:GetChildren() end
 
             -- base row builder
@@ -1155,8 +1829,47 @@ function Library:CreateWindow(cfg)
                 return lbl
             end
 
+            local function bindConfig(o, getter, setter)
+                local opts = type(o) == "table" and o or { Flag = o }
+                if opts.NoConfig or opts.IgnoreConfig or opts.Save == false then return end
+
+                local key = opts.Flag or opts.Name
+                if not key or key == "" then
+                    key = (secCfg.Name or "Section") .. "_Elem_" .. tostring(#box:GetChildren())
+                end
+
+                if Library.ConfigRegistry[key] and not opts.Flag then
+                    key = (secCfg.Name or "Section") .. "/" .. key
+                end
+
+                local entry = {
+                    Get = getter,
+                    Set = setter,
+                    Name = opts.Name,
+                    Flag = opts.Flag,
+                    Section = secCfg.Name,
+                }
+
+                Library.ConfigRegistry[key] = entry
+                Library.Flags[key] = entry
+
+                if opts.Flag and not Library.Flags[opts.Flag] then
+                    Library.Flags[opts.Flag] = entry
+                end
+                if opts.Name and not Library.Flags[opts.Name] then
+                    Library.Flags[opts.Name] = entry
+                end
+
+                return entry
+            end
+
+            -- Сохраняем bindFlag для совместимости со старыми вызовами
             local function bindFlag(flag, getter, setter)
-                if flag then Library.Flags[flag] = { Get = getter, Set = setter } end
+                return bindConfig(flag, getter, setter)
+            end
+
+            if secCfg.Flag then
+                bindConfig({ Flag = secCfg.Flag, Name = secCfg.Name }, function() return Section:IsCollapsed() end, function(v) Section:SetCollapsed(v, false) end)
             end
 
             --=====================================================================--
@@ -1219,14 +1932,34 @@ function Library:CreateWindow(cfg)
                 o = o or {}
                 local state = o.Default or false
                 local f = row(34)
-                labelBlock(f, o.Name or "Toggle", o.Icon, nil, 60)
+                labelBlock(f, o.Name or "Toggle", o.Icon, nil, 130)
 
-                local track = create("Frame", {
-                    BackgroundColor3 = state and Theme.Accent or Theme.ToggleOff,
+                local controls = create("Frame", {
+                    Name = "Controls",
+                    BackgroundTransparency = 1,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(44, 22),
+                    Size = UDim2.new(0, 0, 1, 0),
+                    AutomaticSize = Enum.AutomaticSize.X,
+                    ZIndex = 3,
                     Parent = f,
+                })
+                create("UIListLayout", {
+                    FillDirection = Enum.FillDirection.Horizontal,
+                    HorizontalAlignment = Enum.HorizontalAlignment.Right,
+                    VerticalAlignment = Enum.VerticalAlignment.Center,
+                    Padding = UDim.new(0, 6),
+                    SortOrder = Enum.SortOrder.LayoutOrder,
+                    Parent = controls,
+                })
+
+                local track = create("Frame", {
+                    Name = "Track",
+                    BackgroundColor3 = state and Theme.Accent or Theme.ToggleOff,
+                    Size = UDim2.fromOffset(44, 22),
+                    LayoutOrder = 10,
+                    ZIndex = 4,
+                    Parent = controls,
                 })
                 corner(track, 11)
                 local knob = create("Frame", {
@@ -1234,23 +1967,336 @@ function Library:CreateWindow(cfg)
                     AnchorPoint = Vector2.new(0, 0.5),
                     Position = state and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
                     Size = UDim2.fromOffset(18, 18),
+                    ZIndex = 5,
                     Parent = track,
                 })
                 corner(knob, 9)
 
-                local btn = create("TextButton", { BackgroundTransparency = 1, Size = UDim2.new(1,0,1,0), Text = "", Parent = f })
+                local btn = create("TextButton", {
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 1, 0),
+                    Text = "",
+                    ZIndex = 2,
+                    Parent = f,
+                })
 
+                local listeners = {}
                 local function apply(v, fire)
                     state = v
                     tween(track, TW.Fast, { BackgroundColor3 = v and Theme.Accent or Theme.ToggleOff })
                     tween(knob, TW.Spring, { Position = v and UDim2.new(1, -20, 0.5, 0) or UDim2.new(0, 2, 0.5, 0) })
                     if v then registerAccent(track, "BackgroundColor3") end
+                    for _, fn in ipairs(listeners) do pcall(fn, v) end
                     if fire and o.Callback then task.spawn(o.Callback, v) end
+                    if Window._refreshKeybindList then Window._refreshKeybindList() end
                 end
                 btn.MouseButton1Click:Connect(function() apply(not state, true) end)
-                bindFlag(o.Flag, function() return state end, function(v) apply(v, true) end)
+                local cfgEntry = bindConfig(o, function() return state end, function(v) apply(v, true) end)
                 if state then apply(true, false) end
-                return { Set = function(v) apply(v, true) end, Get = function() return state end }
+
+                local toggleName = o.Name or (cfgEntry and cfgEntry.Name) or "Toggle"
+                local toggleKey = (cfgEntry and cfgEntry.Flag) or (cfgEntry and cfgEntry.Name) or toggleName
+                if not o.NoFastMenu and Window._registerToggle then
+                    Window._registerToggle(toggleKey, {
+                        Name = toggleName,
+                        Key = toggleKey,
+                        Icon = o.Icon,
+                        Get = function() return state end,
+                        Set = function(v) apply(v, true) end,
+                        AddListener = function(fn) table.insert(listeners, fn) end,
+                    })
+                end
+
+                local toggleApi = {
+                    Set = function(v) apply(v, true) end,
+                    Get = function() return state end,
+                    AddListener = function(fn) table.insert(listeners, fn) end,
+                }
+
+                --=========================================--
+                -- SUB-ELEMENT: Color Picker on Toggle     --
+                --=========================================--
+                function toggleApi:AddColorPicker(cpCfg)
+                    cpCfg = cpCfg or {}
+                    local cpColor = cpCfg.Default or Theme.Accent
+                    local cpOpen = false
+                    local cpH, cpS, cpV = cpColor:ToHSV()
+
+                    local swatch = create("TextButton", {
+                        Name = "ColorSwatch",
+                        BackgroundColor3 = cpColor,
+                        Size = UDim2.fromOffset(26, 18),
+                        LayoutOrder = 5,
+                        ZIndex = 6,
+                        Text = "",
+                        AutoButtonColor = false,
+                        Parent = controls,
+                    })
+                    corner(swatch, 4)
+                    stroke(swatch, Theme.StrokeLight, 1, 0.2)
+
+                    -- Popup picker inside the section box directly below this row
+                    local pop = create("Frame", {
+                        Name = "ColorPickerPopup",
+                        BackgroundColor3 = Theme.Bg,
+                        Size = UDim2.new(1, 0, 0, 0),
+                        AutomaticSize = Enum.AutomaticSize.None,
+                        Visible = false,
+                        ClipsDescendants = true,
+                        LayoutOrder = f.LayoutOrder + 1,
+                        Parent = box,
+                    })
+                    corner(pop, 8)
+                    stroke(pop, Theme.StrokeLight, 1, 0.2)
+                    padding(pop, 10)
+
+                    local satval = create("ImageLabel", {
+                        Image = "rbxassetid://4155801252",
+                        BackgroundColor3 = Color3.fromHSV(cpH, 1, 1),
+                        Size = UDim2.new(1, -28, 0, 100),
+                        Parent = pop,
+                    })
+                    corner(satval, 6)
+                    local svCursor = create("Frame", {
+                        BackgroundColor3 = Color3.new(1,1,1),
+                        Size = UDim2.fromOffset(8,8),
+                        AnchorPoint = Vector2.new(0.5,0.5),
+                        Parent = satval,
+                    })
+                    corner(svCursor, 4)
+                    stroke(svCursor, Color3.new(0,0,0), 1)
+
+                    local hueBar = create("Frame", {
+                        Position = UDim2.new(1, -20, 0, 0),
+                        Size = UDim2.new(0, 20, 0, 100),
+                        Parent = pop,
+                    })
+                    corner(hueBar, 6)
+                    create("UIGradient", {
+                        Rotation = 90,
+                        Color = ColorSequence.new({
+                            ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255,0,0)),
+                            ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255,255,0)),
+                            ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0,255,0)),
+                            ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0,255,255)),
+                            ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0,0,255)),
+                            ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255,0,255)),
+                            ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255,0,0)),
+                        }),
+                        Parent = hueBar,
+                    })
+                    local hueCursor = create("Frame", {
+                        BackgroundColor3 = Color3.new(1,1,1),
+                        Size = UDim2.new(1, 4, 0, 3),
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Position = UDim2.new(0.5, 0, cpH, 0),
+                        Parent = hueBar,
+                    })
+
+                    local function refresh(fire)
+                        cpColor = Color3.fromHSV(cpH, cpS, cpV)
+                        swatch.BackgroundColor3 = cpColor
+                        satval.BackgroundColor3 = Color3.fromHSV(cpH, 1, 1)
+                        svCursor.Position = UDim2.new(cpS, 0, 1 - cpV, 0)
+                        hueCursor.Position = UDim2.new(0.5, 0, cpH, 0)
+                        if fire and cpCfg.Callback then task.spawn(cpCfg.Callback, cpColor) end
+                    end
+                    refresh(false)
+
+                    local svDrag, hueDrag = false, false
+                    satval.InputBegan:Connect(function(i)
+                        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then svDrag = true end
+                    end)
+                    hueBar.InputBegan:Connect(function(i)
+                        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then hueDrag = true end
+                    end)
+                    UserInputService.InputChanged:Connect(function(i)
+                        if i.UserInputType ~= Enum.UserInputType.MouseMovement and i.UserInputType ~= Enum.UserInputType.Touch then return end
+                        if svDrag then
+                            cpS = math.clamp((i.Position.X - satval.AbsolutePosition.X)/satval.AbsoluteSize.X, 0, 1)
+                            cpV = 1 - math.clamp((i.Position.Y - satval.AbsolutePosition.Y)/satval.AbsoluteSize.Y, 0, 1)
+                            refresh(true)
+                        elseif hueDrag then
+                            cpH = math.clamp((i.Position.Y - hueBar.AbsolutePosition.Y)/hueBar.AbsoluteSize.Y, 0, 1)
+                            refresh(true)
+                        end
+                    end)
+                    UserInputService.InputEnded:Connect(function(i)
+                        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                            svDrag, hueDrag = false, false
+                        end
+                    end)
+
+                    swatch.MouseButton1Click:Connect(function()
+                        cpOpen = not cpOpen
+                        pop.Visible = true
+                        tween(pop, TW.Normal, { Size = UDim2.new(1, 0, 0, cpOpen and 120 or 0) })
+                        if not cpOpen then task.delay(0.25, function() if not cpOpen then pop.Visible = false end end) end
+                    end)
+
+                    local function setColor(c, fire)
+                        if typeof(c) == "Color3" then
+                            cpH, cpS, cpV = c:ToHSV()
+                            refresh(fire ~= false)
+                        end
+                    end
+
+                    local cpName = cpCfg.Name or (toggleName .. " Color")
+                    bindConfig({ Flag = cpCfg.Flag, Name = cpName, NoConfig = cpCfg.NoConfig }, function() return cpColor end, function(c) setColor(c, true) end)
+                    return { Set = function(c) setColor(c, true) end, Get = function() return cpColor end }
+                end
+
+                --=========================================--
+                -- SUB-ELEMENT: Keybind on Toggle          --
+                --=========================================--
+                function toggleApi:AddKeybind(kbCfg)
+                    kbCfg = kbCfg or {}
+                    local current = kbCfg.Default
+                    local mode = kbCfg.Mode or "Toggle" -- "Toggle" | "Hold" | "Always"
+                    local listening = false
+
+                    local function formatKeyText(k)
+                        if not k then return "None" end
+                        local n = k.Name or tostring(k)
+                        if #n > 6 then n = n:sub(1, 5) .. ".." end
+                        return n
+                    end
+
+                    local kbBtn = create("TextButton", {
+                        Name = "InlineKeybind",
+                        BackgroundColor3 = Theme.Bg,
+                        Size = UDim2.fromOffset(48, 20),
+                        LayoutOrder = 1,
+                        ZIndex = 6,
+                        Text = formatKeyText(current),
+                        TextColor3 = Theme.Text,
+                        Font = Theme.FontMed,
+                        TextSize = 11,
+                        AutoButtonColor = false,
+                        Parent = controls,
+                    })
+                    corner(kbBtn, 4)
+                    local kbs = stroke(kbBtn, Theme.StrokeLight, 1, 0.2)
+
+                    local function cycleMode()
+                        if mode == "Toggle" then mode = "Hold"
+                        elseif mode == "Hold" then mode = "Always"
+                        else mode = "Toggle" end
+
+                        if mode == "Always" then
+                            apply(true, true)
+                        elseif mode == "Hold" then
+                            apply(false, true)
+                        else
+                            apply(false, true)
+                        end
+
+                        if Window._notifyKeybindMode then
+                            Window._notifyKeybindMode(toggleName, mode)
+                        end
+                        if Window._refreshKeybindList then Window._refreshKeybindList() end
+                        if kbCfg.ModeCallback then task.spawn(kbCfg.ModeCallback, mode) end
+                    end
+
+                    kbBtn.MouseButton1Click:Connect(function()
+                        listening = true
+                        kbBtn.Text = "..."
+                        tween(kbs, TW.Fast, { Color = Theme.Accent, Transparency = 0 })
+                    end)
+
+                    kbBtn.MouseButton2Click:Connect(cycleMode)
+
+                    UserInputService.InputBegan:Connect(function(i, gpe)
+                        if listening then
+                            listening = false
+                            tween(kbs, TW.Fast, { Color = Theme.StrokeLight, Transparency = 0.2 })
+                            if i.UserInputType == Enum.UserInputType.Keyboard then
+                                current = i.KeyCode
+                            elseif i.UserInputType == Enum.UserInputType.MouseButton1 then
+                                current = Enum.UserInputType.MouseButton1
+                            elseif i.UserInputType == Enum.UserInputType.MouseButton2 then
+                                current = Enum.UserInputType.MouseButton2
+                            elseif i.UserInputType == Enum.UserInputType.MouseButton3 then
+                                current = Enum.UserInputType.MouseButton3
+                            end
+                            kbBtn.Text = formatKeyText(current)
+                            if Window._refreshKeybindList then Window._refreshKeybindList() end
+                            if kbCfg.ChangedCallback then task.spawn(kbCfg.ChangedCallback, current) end
+                        elseif not gpe and current then
+                            if (i.KeyCode == current) or (i.UserInputType == current) then
+                                if mode == "Toggle" then
+                                    apply(not state, true)
+                                elseif mode == "Hold" then
+                                    apply(true, true)
+                                elseif mode == "Always" then
+                                    apply(true, true)
+                                end
+                                if Window._refreshKeybindList then Window._refreshKeybindList() end
+                            end
+                        end
+                    end)
+
+                    UserInputService.InputEnded:Connect(function(i)
+                        if current and (i.KeyCode == current or i.UserInputType == current) then
+                            if mode == "Hold" then
+                                apply(false, true)
+                                if Window._refreshKeybindList then Window._refreshKeybindList() end
+                            end
+                        end
+                    end)
+
+                    local function setKey(v, fire)
+                        current = v
+                        kbBtn.Text = formatKeyText(v)
+                        if Window._refreshKeybindList then Window._refreshKeybindList() end
+                        if fire and kbCfg.ChangedCallback then task.spawn(kbCfg.ChangedCallback, current) end
+                    end
+
+                    local function setMode(m)
+                        mode = m or "Toggle"
+                        if Window._refreshKeybindList then Window._refreshKeybindList() end
+                    end
+
+                    local kbName = kbCfg.Name or (toggleName .. " Keybind")
+                    bindConfig({ Flag = kbCfg.Flag, Name = kbName, NoConfig = kbCfg.NoConfig },
+                        function()
+                            return {
+                                Key = current and current.Name or nil,
+                                Mode = mode,
+                            }
+                        end,
+                        function(saved)
+                            if type(saved) == "table" then
+                                if saved.Key then
+                                    local kc = Enum.KeyCode[saved.Key] or Enum.UserInputType[saved.Key]
+                                    setKey(kc, false)
+                                end
+                                if saved.Mode then setMode(saved.Mode) end
+                            elseif type(saved) == "string" then
+                                local kc = Enum.KeyCode[saved] or Enum.UserInputType[saved]
+                                setKey(kc, false)
+                            end
+                        end
+                    )
+
+                    if Window._registerKeybind then
+                        Window._registerKeybind({
+                            Name = toggleName,
+                            GetKey = function() return current end,
+                            GetMode = function() return mode end,
+                            GetActive = function() return state end,
+                        })
+                    end
+
+                    return {
+                        Set = function(v) setKey(v, true) end,
+                        Get = function() return current end,
+                        SetMode = setMode,
+                        GetMode = function() return mode end,
+                    }
+                end
+
+                return toggleApi
             end
 
             --=====================================================================--
@@ -1323,7 +2369,7 @@ function Library:CreateWindow(cfg)
                     title.Text = (o.Name or "Slider")..": "..fmt(val)..(o.Suffix or "")
                     if o.Callback then task.spawn(o.Callback, val) end
                 end
-                bindFlag(o.Flag, function() return val end, setVal)
+                bindConfig(o, function() return val end, setVal)
                 return { Set = setVal, Get = function() return val end }
             end
 
@@ -1443,7 +2489,7 @@ function Library:CreateWindow(cfg)
                     if not keep then selected = options[1]; selLbl.Text = tostring(selected or "...") end
                     rebuild()
                 end
-                bindFlag(o.Flag, api.Get, api.Set)
+                bindConfig(o, api.Get, api.Set)
                 return api
             end
     
@@ -1686,8 +2732,8 @@ function Library:CreateWindow(cfg)
                     rebuild()
                 end
     
-                -- config flag: store/restore the list of selected options
-                bindFlag(o.Flag, api.Get, api.Set)
+                -- config: store/restore the list of selected options
+                bindConfig(o, api.Get, api.Set)
                 return api
             end
 
@@ -1724,8 +2770,12 @@ function Library:CreateWindow(cfg)
                     if o.Numeric then v = tonumber(v) or 0; input.Text = tostring(v) end
                     if o.Callback then task.spawn(o.Callback, v, enter) end
                 end)
-                bindFlag(o.Flag, function() return input.Text end, function(v) input.Text = tostring(v) end)
-                return { Set = function(v) input.Text = tostring(v) end, Get = function() return input.Text end }
+                local function setText(v, fire)
+                    input.Text = tostring(v)
+                    if fire and o.Callback then task.spawn(o.Callback, input.Text, false) end
+                end
+                bindConfig(o, function() return input.Text end, function(v) setText(v, true) end)
+                return { Set = function(v) setText(v, true) end, Get = function() return input.Text end }
             end
 
             --=====================================================================--
@@ -1734,26 +2784,61 @@ function Library:CreateWindow(cfg)
             function Section:AddKeybind(o)
                 o = o or {}
                 local current = o.Default
+                local mode = o.Mode or "Toggle" -- "Toggle" | "Hold" | "Always"
+                local active = (mode == "Always")
                 local listening = false
                 local f = row(34)
                 labelBlock(f, o.Name or "Keybind", o.Icon, nil, 90)
+
+                local function formatKeyText(k)
+                    if not k then return "None" end
+                    local n = k.Name or tostring(k)
+                    if #n > 8 then n = n:sub(1, 7) .. ".." end
+                    return n
+                end
 
                 local keyBtn = create("TextButton", {
                     BackgroundColor3 = Theme.Bg,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
                     Size = UDim2.fromOffset(70, 26),
-                    Text = current and current.Name or "None",
+                    Text = formatKeyText(current),
                     TextColor3 = Theme.Text, Font = Theme.FontMed, TextSize = 12,
                     AutoButtonColor = false, Parent = f,
                 })
                 corner(keyBtn, 6); local ks = stroke(keyBtn, Theme.StrokeLight, 1, 0.2)
+
+                local function cycleMode()
+                    if mode == "Toggle" then mode = "Hold"
+                    elseif mode == "Hold" then mode = "Always"
+                    else mode = "Toggle" end
+
+                    if mode == "Always" then
+                        active = true
+                        if o.Callback then task.spawn(o.Callback, true) end
+                    elseif mode == "Hold" then
+                        active = false
+                        if o.Callback then task.spawn(o.Callback, false) end
+                    else
+                        active = false
+                        if o.Callback then task.spawn(o.Callback, false) end
+                    end
+
+                    if Window._notifyKeybindMode then
+                        Window._notifyKeybindMode(o.Name or "Keybind", mode)
+                    end
+                    if Window._refreshKeybindList then Window._refreshKeybindList() end
+                    if o.ModeCallback then task.spawn(o.ModeCallback, mode) end
+                end
 
                 keyBtn.MouseButton1Click:Connect(function()
                     listening = true
                     keyBtn.Text = "..."
                     tween(ks, TW.Fast, { Color = Theme.Accent, Transparency = 0 })
                 end)
+
+                keyBtn.MouseButton2Click:Connect(cycleMode)
+
                 UserInputService.InputBegan:Connect(function(i, gpe)
                     if listening then
                         listening = false
@@ -1762,19 +2847,87 @@ function Library:CreateWindow(cfg)
                             current = i.KeyCode
                         elseif i.UserInputType == Enum.UserInputType.MouseButton1 then current = Enum.UserInputType.MouseButton1
                         elseif i.UserInputType == Enum.UserInputType.MouseButton2 then current = Enum.UserInputType.MouseButton2
+                        elseif i.UserInputType == Enum.UserInputType.MouseButton3 then current = Enum.UserInputType.MouseButton3
                         end
-                        keyBtn.Text = current and current.Name or "None"
+                        keyBtn.Text = formatKeyText(current)
+                        if Window._refreshKeybindList then Window._refreshKeybindList() end
                         if o.ChangedCallback then task.spawn(o.ChangedCallback, current) end
                     elseif not gpe and current then
                         if (i.KeyCode == current) or (i.UserInputType == current) then
-                            if o.Callback then task.spawn(o.Callback) end
+                            if mode == "Toggle" then
+                                active = not active
+                                if o.Callback then task.spawn(o.Callback, active) end
+                            elseif mode == "Hold" then
+                                active = true
+                                if o.Callback then task.spawn(o.Callback, true) end
+                            elseif mode == "Always" then
+                                active = true
+                                if o.Callback then task.spawn(o.Callback, true) end
+                            end
+                            if Window._refreshKeybindList then Window._refreshKeybindList() end
                         end
                     end
                 end)
-                bindFlag(o.Flag,
-                    function() return current end,
-                    function(v) current = v; keyBtn.Text = v and v.Name or "None" end)
-                return { Set = function(v) current = v; keyBtn.Text = v and v.Name or "None" end, Get = function() return current end }
+
+                UserInputService.InputEnded:Connect(function(i)
+                    if current and (i.KeyCode == current or i.UserInputType == current) then
+                        if mode == "Hold" then
+                            active = false
+                            if o.Callback then task.spawn(o.Callback, false) end
+                            if Window._refreshKeybindList then Window._refreshKeybindList() end
+                        end
+                    end
+                end)
+
+                local function setKey(v, fire)
+                    current = v
+                    keyBtn.Text = formatKeyText(v)
+                    if Window._refreshKeybindList then Window._refreshKeybindList() end
+                    if fire and o.ChangedCallback then task.spawn(o.ChangedCallback, current) end
+                end
+
+                local function setMode(m)
+                    mode = m or "Toggle"
+                    if Window._refreshKeybindList then Window._refreshKeybindList() end
+                end
+
+                bindConfig(o,
+                    function()
+                        return {
+                            Key = current and current.Name or nil,
+                            Mode = mode,
+                        }
+                    end,
+                    function(saved)
+                        if type(saved) == "table" then
+                            if saved.Key then
+                                local kc = Enum.KeyCode[saved.Key] or Enum.UserInputType[saved.Key]
+                                setKey(kc, false)
+                            end
+                            if saved.Mode then setMode(saved.Mode) end
+                        elseif type(saved) == "string" then
+                            local kc = Enum.KeyCode[saved] or Enum.UserInputType[saved]
+                            setKey(kc, false)
+                        end
+                    end
+                )
+
+                if Window._registerKeybind then
+                    Window._registerKeybind({
+                        Name = o.Name or "Keybind",
+                        GetKey = function() return current end,
+                        GetMode = function() return mode end,
+                        GetActive = function() return active end,
+                    })
+                end
+
+                return {
+                    Set = function(v) setKey(v, true) end,
+                    Get = function() return current end,
+                    SetMode = setMode,
+                    GetMode = function() return mode end,
+                    GetActive = function() return active end,
+                }
             end
 
             --=====================================================================--
@@ -1892,8 +3045,14 @@ function Library:CreateWindow(cfg)
                     if not open then task.delay(0.25, function() if not open then pop.Visible = false end end) end
                 end)
 
-                bindFlag(o.Flag, function() return color end, function(c) h,s,v = c:ToHSV(); refresh(true) end)
-                return { Set = function(c) h,s,v = c:ToHSV(); refresh(true) end, Get = function() return color end }
+                local function setColor(c, fire)
+                    if typeof(c) == "Color3" then
+                        h,s,v = c:ToHSV()
+                        refresh(fire ~= false)
+                    end
+                end
+                bindConfig(o, function() return color end, function(c) setColor(c, true) end)
+                return { Set = function(c) setColor(c, true) end, Get = function() return color end }
             end
 
             return Section
@@ -1979,11 +3138,93 @@ function Library:CreateWindow(cfg)
             Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
         end })
 
+        --========================= FAST MENU =========================--
+        local fastSec = tab:CreateSection({ Name = "Fast Menu" })
+
+        fastSec:AddToggle({
+            Name = "Enable Fast Menu",
+            Default = Window._fastMenuVisible,
+            NoFastMenu = true,
+            Flag = "_FastMenuEnabled",
+            Callback = function(v)
+                Window._setFastMenuVisible(v)
+            end,
+        })
+
+        local multiDrop = fastSec:AddMultiDropdown({
+            Name = "Select Functions",
+            Options = Window._getToggleNames(),
+            Default = Window._fastMenuSelectedToggles,
+            Placeholder = "Choose toggles...",
+            Flag = "_FastMenuToggles",
+            Callback = function(list)
+                Window._setFastMenuToggles(list)
+            end,
+        })
+        Window._fastMultiDropdown = multiDrop
+
+        fastSec:AddSlider({
+            Name = "Menu Scale",
+            Min = 50,
+            Max = 150,
+            Default = math.floor(Window._fastMenuScale * 100 + 0.5),
+            Suffix = "%",
+            Flag = "_FastMenuScale",
+            Callback = function(v)
+                Window._setFastMenuScale(v / 100)
+            end,
+        })
+
+        fastSec:AddToggle({
+            Name = "Lock Position",
+            Default = Window._fastMenuLocked,
+            NoFastMenu = true,
+            Flag = "_FastMenuLocked",
+            Callback = function(v)
+                Window._setFastMenuLocked(v)
+            end,
+        })
+
+        --========================= KEYBIND LIST =========================--
+        local kbSec = tab:CreateSection({ Name = "Keybind List" })
+
+        kbSec:AddToggle({
+            Name = "Enable Keybind List",
+            Default = Window._keybindListVisible,
+            NoFastMenu = true,
+            Flag = "_KeybindListEnabled",
+            Callback = function(v)
+                Window._setKeybindListVisible(v)
+            end,
+        })
+
+        kbSec:AddSlider({
+            Name = "HUD Scale",
+            Min = 50,
+            Max = 150,
+            Default = math.floor(Window._keybindListScale * 100 + 0.5),
+            Suffix = "%",
+            Flag = "_KeybindListScale",
+            Callback = function(v)
+                Window._setKeybindListScale(v / 100)
+            end,
+        })
+
+        kbSec:AddToggle({
+            Name = "Lock Position",
+            Default = Window._keybindListLocked,
+            NoFastMenu = true,
+            Flag = "_KeybindListLocked",
+            Callback = function(v)
+                Window._setKeybindListLocked(v)
+            end,
+        })
+
         --========================= CONFIGURATION =========================--
         tab:Column("right")
         local cfgSec = tab:CreateSection({ Name = "Configuration" })
 
-        local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config" })
+        local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config", NoConfig = true })
 
         cfgSec:AddButton({ Name = "Create Config", Primary = true, Callback = function()
             local n = nameBox.Get()
@@ -2006,6 +3247,7 @@ function Library:CreateWindow(cfg)
             Name = "Select Config",
             Options = Library:GetConfigs(),
             Default = (Library:GetConfigs())[1] or "",
+            NoConfig = true,
         })
 
         cfgSec:AddButton({ Name = "Load", Callback = function()
