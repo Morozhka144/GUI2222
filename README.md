@@ -40,12 +40,14 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Moroz
 ```lua
 local Window = Library:CreateWindow({
     Title = "MOROLUMINA.lua",
+    ToggleKey = Enum.KeyCode.RightShift, -- по умолчанию RightShift (R Shift)
 })
 ```
 
-| Параметр | Тип | Описание |
-|----------|-----|----------|
-| `Title` | string | Текст в верхней панели окна |
+| Параметр | Тип | По умолчанию | Описание |
+|----------|-----|--------------|----------|
+| `Title` | string | `"MOROLUMINA.lua"` | Текст в верхней панели окна |
+| `ToggleKey` | KeyCode / UserInputType / string | `Enum.KeyCode.RightShift` | Клавиша открытия/закрытия меню на ПК |
 
 ---
 
@@ -430,7 +432,10 @@ Window:Notify({
 ## ❓ FAQ
 
 **Как открыть/закрыть меню?**
-Нажми кнопку **OPEN** или назначь клавишу в Settings → Menu Toggle.
+Нажми клавишу **Right Shift** (по умолчанию для ПК), нажми плавающую кнопку **OPEN** (для мобильных/ПК) или переназначь клавишу в Settings → Menu Toggle.
+
+**Работает ли курсор мыши в играх от первого лица (Doors и др.)?**
+Да! Библиотека автоматически разблокирует и отображает курсор мыши при открытии меню, отключая вращение камеры, а при закрытии меню управление возвращается игре.
 
 **Почему не сохраняется конфиг?**
 Убедись, что исполнитель поддерживает `writefile` / `readfile`. Все функции теперь сохраняются автоматически по имени (`Name`)!
@@ -460,6 +465,9 @@ Window:CreateTab({...})
 Window:Notify({...})
 Window:AddSettingsTab()
 Window:Toggle(true/false)
+Window:IsOpen()
+Window:SetToggleKey(Enum.KeyCode.RightShift)
+Window:GetToggleKey()
 Window:GetFastMenu()
 Window:GetKeybindList()
 
