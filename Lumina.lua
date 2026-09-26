@@ -447,6 +447,181 @@ function Library:CreateWindow(cfg)
         return Window._toggleKey
     end
 
+    -- Teleport / Execution state
+    Window._executeOnTeleport = cfg.ExecuteOnTeleport == true
+    Window._teleportDelay = math.max(0, tonumber(cfg.TeleportDelay) or 5)
+    Window._teleportFile = tostring(cfg.TeleportFile or "Doors.lua")
+    Window._teleportScript = cfg.TeleportScript or nil
+    Window._teleportUrl = tostring(cfg.TeleportUrl or cfg.ScriptUrl or "")
+
+    function Window:SetExecuteOnTeleport(enabled)
+        Window._executeOnTeleport = (enabled == true)
+        if Window._tpToggle and Window._tpToggle.Set then
+            Window._tpToggle.Set(Window._executeOnTeleport)
+        end
+    end
+
+    function Window:GetExecuteOnTeleport()
+        return Window._executeOnTeleport
+    end
+
+    function Window:SetTeleportDelay(delay)
+        Window._teleportDelay = math.max(0, tonumber(delay) or 0)
+        if Window._tpDelaySlider and Window._tpDelaySlider.Set then
+            Window._tpDelaySlider.Set(Window._teleportDelay)
+        end
+    end
+
+    function Window:GetTeleportDelay()
+        return Window._teleportDelay
+    end
+
+    function Window:SetTeleportFile(fileName)
+        Window._teleportFile = tostring(fileName or "Doors.lua")
+    end
+
+    function Window:GetTeleportFile()
+        return Window._teleportFile
+    end
+
+    function Window:SetTeleportUrl(url)
+        Window._teleportUrl = tostring(url or "")
+    end
+
+    function Window:GetTeleportUrl()
+        return Window._teleportUrl
+    end
+
+    function Window:SetTeleportScript(scriptStr)
+        Window._teleportScript = scriptStr
+    end
+
+    function Window:GetTeleportScript()
+        return Window._teleportScript
+    end
+
+    local queueTeleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport) or (getgenv and getgenv().queue_on_teleport)
+    local queuedThisTeleport = false
+
+    local function buildTeleportPayload()
+        local delaySec = math.max(0, tonumber(Window._teleportDelay) or 5)
+        local fileName = Window._teleportFile or "Doors.lua"
+        local lowerFile = fileName:lower()
+
+        local scriptCode
+        if Window._teleportScript and Window._teleportScript ~= "" then
+            scriptCode = string.format([[
+pcall(function()
+    local fn, err = loadstring(%q)
+    if fn then
+        task.spawn(fn)
+    else
+        warn("[MoroLumina] Teleport compile error: " .. tostring(err))
+    end
+end)
+]], Window._teleportScript)
+        elseif Window._teleportUrl and Window._teleportUrl ~= "" then
+            scriptCode = string.format([[
+pcall(function()
+    local src = game:HttpGet(%q)
+    if src and src ~= "" then
+        local fn, err = loadstring(src)
+        if fn then
+            task.spawn(fn)
+        else
+            warn("[MoroLumina] Teleport compile error: " .. tostring(err))
+        end
+    end
+end)
+]], Window._teleportUrl)
+        else
+            -- Default: automatically load local script from exploit folder (Doors.lua / doors.lua)
+            scriptCode = string.format([[
+pcall(function()
+    local targetFile = %q
+    local altFile = %q
+    if isfile and isfile(targetFile) then
+        if loadfile then
+            local fn, err = loadfile(targetFile)
+            if fn then return task.spawn(fn) end
+        end
+        if readfile then
+            local src = readfile(targetFile)
+            local fn, err = loadstring(src)
+            if fn then return task.spawn(fn) end
+        end
+    elseif isfile and isfile(altFile) then
+        if loadfile then
+            local fn, err = loadfile(altFile)
+            if fn then return task.spawn(fn) end
+        end
+        if readfile then
+            local src = readfile(altFile)
+            local fn, err = loadstring(src)
+            if fn then return task.spawn(fn) end
+        end
+    elseif loadfile then
+        local fn = loadfile(targetFile) or loadfile(altFile)
+        if fn then return task.spawn(fn) end
+    end
+    warn("[MoroLumina] Teleport: could not find " .. targetFile .. " to execute")
+end)
+]], fileName, lowerFile)
+        end
+
+        local payload = string.format([[
+repeat task.wait() until game:IsLoaded()
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+while not lp do
+    task.wait()
+    lp = Players.LocalPlayer
+end
+if %d > 0 then
+    task.wait(%d)
+end
+%s
+]], delaySec, delaySec, scriptCode)
+
+        return payload
+    end
+
+    local function queueTeleportExecution()
+        if not Window._executeOnTeleport or not queueTeleport then return end
+        local payload = buildTeleportPayload()
+        if payload then
+            queuedThisTeleport = true
+            pcall(function()
+                queueTeleport(payload)
+            end)
+        end
+    end
+    Window._queueTeleportExecution = queueTeleportExecution
+
+    local function attachTeleportListener(player)
+        if not player then return end
+        player.OnTeleport:Connect(function(state)
+            if not state or state == Enum.TeleportState.Started or state == Enum.TeleportState.InProgress then
+                if not queuedThisTeleport then
+                    queueTeleportExecution()
+                end
+            elseif state == Enum.TeleportState.Failed then
+                queuedThisTeleport = false
+            end
+        end)
+    end
+
+    if LocalPlayer then
+        attachTeleportListener(LocalPlayer)
+    else
+        task.spawn(function()
+            LocalPlayer = Players.LocalPlayer or Players:GetPropertyChangedSignal("LocalPlayer"):Wait() or Players.LocalPlayer
+            if LocalPlayer then
+                attachTeleportListener(LocalPlayer)
+            end
+        end)
+    end
+
     -- root gui
     local gui = create("ScreenGui", {
         Name = "MoroLumina",
@@ -3216,14 +3391,15 @@ function Library:CreateWindow(cfg)
             --=====================================================================--
             function Section:AddTextbox(o)
                 o = o or {}
+                local boxW = o.Width or 70
                 local f = row(o.Sub and 44 or 36)
-                labelBlock(f, o.Name or "Textbox", o.Icon, o.Sub, 150)
+                labelBlock(f, o.Name or "Textbox", o.Icon, o.Sub, math.max(150, boxW + 14))
 
                 local boxBg = create("Frame", {
                     BackgroundColor3 = Theme.Bg,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(70, 28), Parent = f,
+                    Size = UDim2.fromOffset(boxW, 28), Parent = f,
                 })
                 corner(boxBg, 6); local bs = stroke(boxBg, Theme.StrokeLight, 1, 0.2)
                 padding(boxBg, nil, 0, 0, 8, 8)
@@ -3607,6 +3783,7 @@ function Library:CreateWindow(cfg)
             Window.Gui:Destroy()
         end })
         actions:AddButton({ Name = "Rejoin Server", NoFastMenu = true, Callback = function()
+            if Window._queueTeleportExecution then Window._queueTeleportExecution() end
             TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end })
         actions:AddButton({ Name = "Server Hop", Primary = true, NoFastMenu = true, Callback = function()
@@ -3619,6 +3796,7 @@ function Library:CreateWindow(cfg)
                 for _, s in ipairs(servers.data) do
                     if s.playing < s.maxPlayers and s.id ~= game.JobId then
                         pcall(function()
+                            if Window._queueTeleportExecution then Window._queueTeleportExecution() end
                             TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
                         end)
                         return
@@ -3627,6 +3805,37 @@ function Library:CreateWindow(cfg)
             end
             Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
         end })
+
+        --========================= TELEPORT =========================--
+        local tpSec = tab:CreateSection({ Name = "Teleport" })
+
+        local tpToggle = tpSec:AddToggle({
+            Name = "Execute on Teleport",
+            Default = Window._executeOnTeleport,
+            Flag = "_ExecuteOnTeleport",
+            Callback = function(v)
+                Window._executeOnTeleport = v
+                if v and not queueTeleport then
+                    Window:Notify({ Title = "Teleport", Content = "Executor does not support queue_on_teleport!", Type = "Warning", Duration = 4 })
+                elseif v then
+                    Window:Notify({ Title = "Teleport", Content = "Execute on Teleport enabled ("..tostring(Window._teleportDelay).."s delay)", Type = "Success", Duration = 2.5 })
+                end
+            end,
+        })
+        Window._tpToggle = tpToggle
+
+        local tpDelaySlider = tpSec:AddSlider({
+            Name = "Execution Delay",
+            Min = 0,
+            Max = 30,
+            Default = Window._teleportDelay,
+            Suffix = "s",
+            Flag = "_TeleportDelay",
+            Callback = function(v)
+                Window._teleportDelay = v
+            end,
+        })
+        Window._tpDelaySlider = tpDelaySlider
 
         --========================= FAST MENU =========================--
         local fastSec = tab:CreateSection({ Name = "Fast Menu" })
