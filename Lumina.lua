@@ -18,6 +18,7 @@ local RunService        = game:GetService("RunService")
 local HttpService       = game:GetService("HttpService")
 local TeleportService   = game:GetService("TeleportService")
 local CoreGui           = game:GetService("CoreGui")
+local SoundService      = game:GetService("SoundService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -258,14 +259,92 @@ local PLACE = tostring(game.PlaceId)
 local ROOT  = "MoroLumina"
 local CFG_DIR = ROOT .. "/Configs/" .. PLACE
 local AUTO_FILE = CFG_DIR .. "/_autoload.txt"
+local SOUND_DIR = ROOT .. "/Sounds"
+local customAsset = getcustomasset or getsynasset
 
 if hasFS then
     pcall(function()
         if not isfolder(ROOT) then makefolder(ROOT) end
         if not isfolder(ROOT.."/Configs") then makefolder(ROOT.."/Configs") end
         if not isfolder(CFG_DIR) then makefolder(CFG_DIR) end
+        if not isfolder(SOUND_DIR) then makefolder(SOUND_DIR) end
     end)
 end
+
+--===================================================================================--
+--                             NOTIFICATION SOUNDS                                   --
+--===================================================================================--
+local NOTIF_SOUNDS = {
+    { Name = "Error",   File = "Error.mp3",   Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Error.mp3" },
+    { Name = "Warn",    File = "Warn.mp3",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Warn.mp3" },
+    { Name = "Litvin",  File = "Litvin.m4a",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Litvin.m4a" },
+    { Name = "Loader",  File = "Loader.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Loader.mp3" },
+    { Name = "Payment", File = "payment.mp3", Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/payment.mp3" },
+    { Name = "Soft",    File = "soft.mp3",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/soft.mp3" },
+    { Name = "Tuntun",  File = "tuntun.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/tuntun.mp3" },
+    { Name = "Vibe",    File = "vibe.m4a",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/vibe.m4a" },
+    { Name = "Voiced",  File = "voiced.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/voiced.mp3" },
+}
+
+local NOTIF_SOUND_NAMES = { "Soft", "Payment", "Tuntun", "Voiced", "Litvin", "Vibe", "Loader", "Warn", "Error" }
+
+local function getSoundAsset(item)
+    if not item then return nil end
+    if item.AssetId then return item.AssetId end
+    if not (hasFS and customAsset) then return nil end
+
+    local path = SOUND_DIR .. "/" .. item.File
+    if isfile and not isfile(path) then
+        local ok, data = pcall(function() return game:HttpGet(item.Url) end)
+        if ok and data and data ~= "" then
+            pcall(writefile, path, data)
+        end
+    end
+
+    if isfile and isfile(path) then
+        local ok, asset = pcall(function() return customAsset(path) end)
+        if ok and asset then
+            item.AssetId = asset
+            return asset
+        end
+    end
+    return nil
+end
+
+local notifSoundInstance = Instance.new("Sound")
+notifSoundInstance.Name = "LuminaNotifySound"
+pcall(function() notifSoundInstance.Parent = SoundService end)
+
+local function playNotifySound(name, vol)
+    if not notifSoundInstance then return end
+    local item
+    local search = tostring(name or ""):lower()
+    for _, s in ipairs(NOTIF_SOUNDS) do
+        if s.Name:lower() == search or s.File:lower() == search then
+            item = s
+            break
+        end
+    end
+    item = item or NOTIF_SOUNDS[4] -- default "Soft"
+
+    task.spawn(function()
+        local assetId = getSoundAsset(item)
+        if assetId then
+            pcall(function()
+                notifSoundInstance.SoundId = assetId
+                notifSoundInstance.Volume = math.clamp(tonumber(vol) or 0.7, 0, 1)
+                notifSoundInstance.TimePosition = 0
+                notifSoundInstance:Play()
+            end)
+        end
+    end)
+end
+
+task.spawn(function()
+    for _, s in ipairs(NOTIF_SOUNDS) do
+        getSoundAsset(s)
+    end
+end)
 
 local function serialize(v)
     if typeof(v) == "Color3" then return {__t="c", v.R, v.G, v.B} end
@@ -445,6 +524,56 @@ function Library:CreateWindow(cfg)
 
     function Window:GetToggleKey()
         return Window._toggleKey
+    end
+
+    -- Notification sound state
+    Window._notifySoundEnabled = (cfg.NotifySound ~= false) and (cfg.NotificationSound ~= false)
+    Window._loaderSoundEnabled = (cfg.LoaderSound ~= false) and (cfg.StartupSound ~= false)
+    Window._notifySoundName = tostring(cfg.NotifySoundName or cfg.NotificationSoundName or "Soft")
+    Window._notifySoundVolume = math.clamp(tonumber(cfg.NotifySoundVolume or cfg.NotificationVolume) or 70, 0, 100)
+
+    function Window:SetLoaderSound(enabled)
+        Window._loaderSoundEnabled = (enabled == true)
+        if Window._loaderSoundToggle and Window._loaderSoundToggle.Set then
+            Window._loaderSoundToggle.Set(Window._loaderSoundEnabled)
+        end
+    end
+
+    function Window:GetLoaderSound()
+        return Window._loaderSoundEnabled
+    end
+
+    function Window:SetNotifySound(enabled)
+        Window._notifySoundEnabled = (enabled == true)
+        if Window._notifySoundToggle and Window._notifySoundToggle.Set then
+            Window._notifySoundToggle.Set(Window._notifySoundEnabled)
+        end
+    end
+
+    function Window:GetNotifySound()
+        return Window._notifySoundEnabled
+    end
+
+    function Window:SetNotifySoundName(name)
+        Window._notifySoundName = tostring(name or "Soft")
+        if Window._notifySoundDropdown and Window._notifySoundDropdown.Set then
+            Window._notifySoundDropdown.Set(Window._notifySoundName)
+        end
+    end
+
+    function Window:GetNotifySoundName()
+        return Window._notifySoundName
+    end
+
+    function Window:SetNotifySoundVolume(vol)
+        Window._notifySoundVolume = math.clamp(tonumber(vol) or 70, 0, 100)
+        if Window._notifySoundSlider and Window._notifySoundSlider.Set then
+            Window._notifySoundSlider.Set(Window._notifySoundVolume)
+        end
+    end
+
+    function Window:GetNotifySoundVolume()
+        return Window._notifySoundVolume
     end
 
     -- Teleport / Execution state
@@ -1315,6 +1444,22 @@ end
         n = n or {}
         local col = notifyColor(n.Type)
         local dur = n.Duration or 4
+
+        if Window._notifySoundEnabled and (n.Sound ~= false) then
+            local typ = tostring(n.Type or ""):lower()
+            local sndName
+            if typ == "error" then
+                sndName = "Error"
+            elseif typ == "warning" or typ == "warn" then
+                sndName = "Warn"
+            elseif type(n.Sound) == "string" and n.Sound ~= "" then
+                sndName = n.Sound
+            else
+                sndName = Window._notifySoundName
+            end
+            local vol = (n.Volume and (tonumber(n.Volume) / (tonumber(n.Volume) > 1 and 100 or 1))) or (Window._notifySoundVolume / 100)
+            playNotifySound(sndName, vol)
+        end
 
         _notifyOrder = _notifyOrder + 1
 
@@ -3716,16 +3861,138 @@ end
     end -- CreateTab
 
     --===============================================================================--
+    --                       CONFIGS TAB (built-in)                                    --
+    --===============================================================================--
+    function Window:AddConfigsTab()
+        if Window._configsTab then return Window._configsTab end
+        local cfgDrop, autoLabel
+        local tab = Window:CreateTab({ Name = "Configs", Icon = "folder" })
+        Window._configsTab = tab
+
+        --========================= LEFT: CONFIGURATION =========================--
+        tab:Column("left")
+        local cfgSec = tab:CreateSection({ Name = "Configuration" })
+
+        local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config", NoConfig = true })
+
+        cfgSec:AddButton({ Name = "Create Config", Primary = true, NoFastMenu = true, Callback = function()
+            local n = nameBox.Get()
+            n = (n or ""):gsub("[^%w_%- ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if n == "" then
+                Window:Notify({ Title = "Config", Content = "Enter a name first.", Type = "Warning" })
+                return
+            end
+            if Library:SaveConfig(n) then
+                cfgDrop.Refresh(Library:GetConfigs(), true)
+                cfgDrop.Set(n)
+                Window:Notify({ Title = "Config", Content = "Created '"..n.."'", Type = "Success" })
+            else
+                Window:Notify({ Title = "Config", Content = "Failed to create.", Type = "Error" })
+            end
+        end })
+
+        cfgDrop = cfgSec:AddDropdown({
+            Name = "Select Config",
+            Options = Library:GetConfigs(),
+            Default = (Library:GetConfigs())[1] or "",
+            NoConfig = true,
+        })
+
+        cfgSec:AddButton({ Name = "Load", NoFastMenu = true, Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                if Library:LoadConfig(n) then
+                    Window:Notify({ Title = "Config", Content = "Loaded '"..n.."'", Type = "Success" })
+                else
+                    Window:Notify({ Title = "Config", Content = "Failed to load.", Type = "Error" })
+                end
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        cfgSec:AddButton({ Name = "Delete", NoFastMenu = true, Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                Library:DeleteConfig(n)
+                if Library:GetAutoLoad() == n then Library:ClearAutoLoad() end
+                cfgDrop.Refresh(Library:GetConfigs())
+                Window:Notify({ Title = "Config", Content = "Deleted '"..n.."'", Type = "Info" })
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        --========================= RIGHT: MORE ACTIONS =========================--
+        tab:Column("right")
+        local moreSec = tab:CreateSection({ Name = "More Actions" })
+
+        moreSec:AddButton({ Name = "Overwrite", NoFastMenu = true, Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                Library:SaveConfig(n)
+                Window:Notify({ Title = "Config", Content = "Overwritten '"..n.."'", Type = "Success" })
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        moreSec:AddButton({ Name = "Set Auto-Load", NoFastMenu = true, Callback = function()
+            local n = cfgDrop.Get()
+            if n and n ~= "" then
+                Library:SetAutoLoad(n)
+                autoLabel.Set("Auto-Load: "..n)
+                Window:Notify({ Title = "Config", Content = "Auto-load set to '"..n.."'", Type = "Success" })
+            else
+                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
+            end
+        end })
+
+        moreSec:AddButton({ Name = "Clear Auto-Load", NoFastMenu = true, Callback = function()
+            Library:ClearAutoLoad()
+            autoLabel.Set("Auto-Load: none")
+            Window:Notify({ Title = "Config", Content = "Auto-load cleared.", Type = "Info" })
+        end })
+
+        moreSec:AddButton({ Name = "Refresh List", NoFastMenu = true, Callback = function()
+            cfgDrop.Refresh(Library:GetConfigs())
+            Window:Notify({ Title = "Config", Content = "List refreshed.", Type = "Info" })
+        end })
+
+        -- статус автозагрузки
+        autoLabel = moreSec:AddLabel("Auto-Load: " .. (Library:GetAutoLoad() or "none"))
+
+        -- автозагрузка при старте (срабатывает один раз)
+        if not Window._autoLoadSpawned then
+            Window._autoLoadSpawned = true
+            task.spawn(function()
+                task.wait(0.5)
+                local auto = Library:GetAutoLoad()
+                if auto and auto ~= "" then
+                    if Library:LoadConfig(auto) then
+                        Window:Notify({ Title = "Auto-Load", Content = "Loaded config '"..auto.."'", Type = "Success", Duration = 4 })
+                    end
+                end
+            end)
+        end
+
+        return tab
+    end
+
+    --===============================================================================--
     --                       SETTINGS TAB (built-in)                                   --
     --===============================================================================--
     function Window:AddSettingsTab()
-        local cfgDrop, autoLabel
+        if Window._settingsTab then return Window._settingsTab, Window._configsTab end
         local tab = Window:CreateTab({ Name = "Settings", Icon = "settings" })
+        Window._settingsTab = tab
 
-        --========================= INTERFACE =========================--
+        --========================= LEFT COLUMN =========================--
+        tab:Column("left")
+
+        -- 1. Interface
         local theme = tab:CreateSection({ Name = "Interface" })
 
-        -- Масштаб ВСЕХ элементов (через winScale, дропдаун 50-150%, по умолч. 75)
         theme:AddDropdown({
             Name = "UI Scale",
             Default = "75%",
@@ -3737,7 +4004,6 @@ end
             end,
         })
 
-        -- Клавиша открытия/закрытия меню
         theme:AddKeybind({
             Name = "Menu Toggle",
             Default = Window._toggleKey or Enum.KeyCode.RightShift,
@@ -3752,7 +4018,6 @@ end
             end,
         })
 
-        -- Цвет акцента (премиальные цвета)
         theme:AddDropdown({
             Name = "Accent Color",
             Default = "Emerald",
@@ -3777,67 +4042,7 @@ end
             end,
         })
 
-        --========================= ACTIONS =========================--
-        local actions = tab:CreateSection({ Name = "Actions" })
-        actions:AddButton({ Name = "Unload Menu", NoFastMenu = true, Callback = function()
-            Window.Gui:Destroy()
-        end })
-        actions:AddButton({ Name = "Rejoin Server", NoFastMenu = true, Callback = function()
-            if Window._queueTeleportExecution then Window._queueTeleportExecution() end
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end })
-        actions:AddButton({ Name = "Server Hop", Primary = true, NoFastMenu = true, Callback = function()
-            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
-            local ok, servers = pcall(function()
-                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
-                return HttpService:JSONDecode(game:HttpGet(url))
-            end)
-            if ok and servers and servers.data then
-                for _, s in ipairs(servers.data) do
-                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
-                        pcall(function()
-                            if Window._queueTeleportExecution then Window._queueTeleportExecution() end
-                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
-                        end)
-                        return
-                    end
-                end
-            end
-            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
-        end })
-
-        --========================= TELEPORT =========================--
-        local tpSec = tab:CreateSection({ Name = "Teleport" })
-
-        local tpToggle = tpSec:AddToggle({
-            Name = "Execute on Teleport",
-            Default = Window._executeOnTeleport,
-            Flag = "_ExecuteOnTeleport",
-            Callback = function(v)
-                Window._executeOnTeleport = v
-                if v and not queueTeleport then
-                    Window:Notify({ Title = "Teleport", Content = "Executor does not support queue_on_teleport!", Type = "Warning", Duration = 4 })
-                elseif v then
-                    Window:Notify({ Title = "Teleport", Content = "Execute on Teleport enabled ("..tostring(Window._teleportDelay).."s delay)", Type = "Success", Duration = 2.5 })
-                end
-            end,
-        })
-        Window._tpToggle = tpToggle
-
-        local tpDelaySlider = tpSec:AddSlider({
-            Name = "Execution Delay",
-            Min = 0,
-            Max = 30,
-            Default = Window._teleportDelay,
-            Suffix = "s",
-            Flag = "_TeleportDelay",
-            Callback = function(v)
-                Window._teleportDelay = v
-            end,
-        })
-        Window._tpDelaySlider = tpDelaySlider
-
-        --========================= FAST MENU =========================--
+        -- 2. Fast Menu
         local fastSec = tab:CreateSection({ Name = "Fast Menu" })
 
         fastSec:AddToggle({
@@ -3905,7 +4110,7 @@ end
             end,
         })
 
-        --========================= KEYBIND LIST =========================--
+        -- 3. Keybind List
         local kbSec = tab:CreateSection({ Name = "Keybind List" })
 
         kbSec:AddToggle({
@@ -3949,114 +4154,168 @@ end
             end,
         })
 
-        --========================= CONFIGURATION =========================--
+        --========================= RIGHT COLUMN =========================--
         tab:Column("right")
-        local cfgSec = tab:CreateSection({ Name = "Configuration" })
 
-        local nameBox = cfgSec:AddTextbox({ Name = "Config Name", Placeholder = "my_config", NoConfig = true })
+        -- 1. Teleport
+        local tpSec = tab:CreateSection({ Name = "Teleport" })
 
-        cfgSec:AddButton({ Name = "Create Config", Primary = true, NoFastMenu = true, Callback = function()
-            local n = nameBox.Get()
-            n = (n or ""):gsub("[^%w_%- ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
-            if n == "" then
-                Window:Notify({ Title = "Config", Content = "Enter a name first.", Type = "Warning" })
-                return
+        local tpToggle = tpSec:AddToggle({
+            Name = "Execute on Teleport",
+            Default = Window._executeOnTeleport,
+            Flag = "_ExecuteOnTeleport",
+            Callback = function(v)
+                Window._executeOnTeleport = v
+                if v and not queueTeleport then
+                    Window:Notify({ Title = "Teleport", Content = "Executor does not support queue_on_teleport!", Type = "Warning", Duration = 4 })
+                elseif v then
+                    Window:Notify({ Title = "Teleport", Content = "Execute on Teleport enabled ("..tostring(Window._teleportDelay).."s delay)", Type = "Success", Duration = 2.5 })
+                end
+            end,
+        })
+        Window._tpToggle = tpToggle
+
+        local tpDelaySlider = tpSec:AddSlider({
+            Name = "Execution Delay",
+            Min = 0,
+            Max = 30,
+            Default = Window._teleportDelay,
+            Suffix = "s",
+            Flag = "_TeleportDelay",
+            Callback = function(v)
+                Window._teleportDelay = v
+            end,
+        })
+        Window._tpDelaySlider = tpDelaySlider
+
+        -- 2. Actions
+        local actions = tab:CreateSection({ Name = "Actions" })
+        actions:AddButton({ Name = "Unload Menu", NoFastMenu = true, Callback = function()
+            Window.Gui:Destroy()
+            pcall(function() notifSoundInstance:Destroy() end)
+        end })
+        actions:AddButton({ Name = "Rejoin Server", NoFastMenu = true, Callback = function()
+            if Window._queueTeleportExecution then Window._queueTeleportExecution() end
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
+        end })
+        actions:AddButton({ Name = "Server Hop", Primary = true, NoFastMenu = true, Callback = function()
+            Window:Notify({ Title = "Server Hop", Content = "Searching for a server...", Type = "Info" })
+            local ok, servers = pcall(function()
+                local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+                return HttpService:JSONDecode(game:HttpGet(url))
+            end)
+            if ok and servers and servers.data then
+                for _, s in ipairs(servers.data) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        pcall(function()
+                            if Window._queueTeleportExecution then Window._queueTeleportExecution() end
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+                        end)
+                        return
+                    end
+                end
             end
-            if Library:SaveConfig(n) then
-                cfgDrop.Refresh(Library:GetConfigs(), true)
-                cfgDrop.Set(n)
-                Window:Notify({ Title = "Config", Content = "Created '"..n.."'", Type = "Success" })
-            else
-                Window:Notify({ Title = "Config", Content = "Failed to create.", Type = "Error" })
-            end
+            Window:Notify({ Title = "Server Hop", Content = "No servers found.", Type = "Error" })
         end })
 
-        -- объявляем cfgDrop через локал, чтобы кнопки выше его видели
-        cfgDrop = cfgSec:AddDropdown({
-            Name = "Select Config",
-            Options = Library:GetConfigs(),
-            Default = (Library:GetConfigs())[1] or "",
-            NoConfig = true,
+        -- 3. Notifications (Sounds)
+        local notifSec = tab:CreateSection({ Name = "Notifications" })
+
+        local notifToggle = notifSec:AddToggle({
+            Name = "Notification Sound",
+            Default = Window._notifySoundEnabled,
+            Flag = "_NotifySoundEnabled",
+            Callback = function(v)
+                Window._notifySoundEnabled = v
+            end,
+        })
+        Window._notifySoundToggle = notifToggle
+
+        local loaderToggle = notifSec:AddToggle({
+            Name = "Startup Sound (Loader)",
+            Default = Window._loaderSoundEnabled,
+            Flag = "_LoaderSoundEnabled",
+            Callback = function(v)
+                Window._loaderSoundEnabled = v
+            end,
+        })
+        Window._loaderSoundToggle = loaderToggle
+
+        local notifDrop = notifSec:AddDropdown({
+            Name = "Sound Type",
+            Options = NOTIF_SOUND_NAMES,
+            Default = Window._notifySoundName,
+            Flag = "_NotifySoundName",
+            Callback = function(v)
+                Window._notifySoundName = v
+                if Window._notifySoundEnabled then
+                    playNotifySound(v, Window._notifySoundVolume / 100)
+                end
+            end,
+        })
+        Window._notifySoundDropdown = notifDrop
+
+        local notifSlider = notifSec:AddSlider({
+            Name = "Sound Volume",
+            Min = 0,
+            Max = 100,
+            Default = Window._notifySoundVolume,
+            Suffix = "%",
+            Flag = "_NotifySoundVolume",
+            Callback = function(v)
+                Window._notifySoundVolume = v
+            end,
+        })
+        Window._notifySoundSlider = notifSlider
+
+        notifSec:AddButton({
+            Name = "Test Notification",
+            NoFastMenu = true,
+            Callback = function()
+                Window:Notify({
+                    Title = "Sound Test",
+                    Content = "Playing " .. tostring(Window._notifySoundName) .. " (" .. tostring(Window._notifySoundVolume) .. "%)",
+                    Type = "Info",
+                    Duration = 2,
+                })
+            end,
         })
 
-        cfgSec:AddButton({ Name = "Load", NoFastMenu = true, Callback = function()
-            local n = cfgDrop.Get()
-            if n and n ~= "" then
-                if Library:LoadConfig(n) then
-                    Window:Notify({ Title = "Config", Content = "Loaded '"..n.."'", Type = "Success" })
-                else
-                    Window:Notify({ Title = "Config", Content = "Failed to load.", Type = "Error" })
-                end
-            else
-                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
-            end
-        end })
+        notifSec:AddButton({
+            Name = "Test Warning & Error",
+            NoFastMenu = true,
+            Callback = function()
+                Window:Notify({
+                    Title = "Warning",
+                    Content = "Testing Warn.mp3 sound!",
+                    Type = "Warning",
+                    Duration = 2.5,
+                })
+                task.delay(1.2, function()
+                    Window:Notify({
+                        Title = "Error",
+                        Content = "Testing Error.mp3 sound!",
+                        Type = "Error",
+                        Duration = 2.5,
+                    })
+                end)
+            end,
+        })
 
-        cfgSec:AddButton({ Name = "Overwrite", NoFastMenu = true, Callback = function()
-            local n = cfgDrop.Get()
-            if n and n ~= "" then
-                Library:SaveConfig(n)
-                Window:Notify({ Title = "Config", Content = "Overwritten '"..n.."'", Type = "Success" })
-            else
-                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
-            end
-        end })
+        -- Automatically add Configs tab if not already created
+        local cfgTab = Window:AddConfigsTab()
 
-        cfgSec:AddButton({ Name = "Delete", NoFastMenu = true, Callback = function()
-            local n = cfgDrop.Get()
-            if n and n ~= "" then
-                Library:DeleteConfig(n)
-                if Library:GetAutoLoad() == n then Library:ClearAutoLoad() end
-                cfgDrop.Refresh(Library:GetConfigs())
-                Window:Notify({ Title = "Config", Content = "Deleted '"..n.."'", Type = "Info" })
-            else
-                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
-            end
-        end })
-
-        cfgSec:AddButton({ Name = "Set Auto-Load", NoFastMenu = true, Callback = function()
-            local n = cfgDrop.Get()
-            if n and n ~= "" then
-                Library:SetAutoLoad(n)
-                autoLabel.Set("Auto-Load: "..n)
-                Window:Notify({ Title = "Config", Content = "Auto-load set to '"..n.."'", Type = "Success" })
-            else
-                Window:Notify({ Title = "Config", Content = "Select a config first.", Type = "Warning" })
-            end
-        end })
-
-        cfgSec:AddButton({ Name = "Clear Auto-Load", NoFastMenu = true, Callback = function()
-            Library:ClearAutoLoad()
-            autoLabel.Set("Auto-Load: none")
-            Window:Notify({ Title = "Config", Content = "Auto-load cleared.", Type = "Info" })
-        end })
-
-        cfgSec:AddButton({ Name = "Refresh List", NoFastMenu = true, Callback = function()
-            cfgDrop.Refresh(Library:GetConfigs())
-            Window:Notify({ Title = "Config", Content = "List refreshed.", Type = "Info" })
-        end })
-
-        -- статус автозагрузки
-        autoLabel = cfgSec:AddLabel("Auto-Load: " .. (Library:GetAutoLoad() or "none"))
-
-        -- автозагрузка при старте (срабатывает один раз)
-        task.spawn(function()
-            task.wait(0.5)
-            local auto = Library:GetAutoLoad()
-            if auto and auto ~= "" then
-                if Library:LoadConfig(auto) then
-                    Window:Notify({ Title = "Auto-Load", Content = "Loaded config '"..auto.."'", Type = "Success", Duration = 4 })
-                end
-            end
-        end)
-
-        return tab
+        return tab, cfgTab
     end
 
     gearBtn.MouseButton1Click:Connect(function()
-        -- jump to last tab (settings) if exists
-        local last = Window._tabs[#Window._tabs]
-        if last then last._activate() end
+        -- jump to settings tab if exists, else last tab
+        if Window._settingsTab then
+            Window._settingsTab._activate()
+        else
+            local last = Window._tabs[#Window._tabs]
+            if last then last._activate() end
+        end
     end)
 
     -- entrance animation
@@ -4064,6 +4323,10 @@ end
     canvas.GroupTransparency = 1
     tween(winScale, TW.Slow, { Scale = userScale })
     tween(canvas, TW.Normal, { GroupTransparency = 0 })
+
+    if Window._loaderSoundEnabled then
+        playNotifySound("Loader", Window._notifySoundVolume / 100)
+    end
 
     return Window
 end -- CreateWindow
