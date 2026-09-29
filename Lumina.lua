@@ -277,12 +277,12 @@ end
 local NOTIF_SOUNDS = {
     { Name = "Error",   File = "Error.mp3",   Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Error.mp3" },
     { Name = "Warn",    File = "Warn.mp3",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Warn.mp3" },
-    { Name = "Litvin",  File = "Litvin.m4a",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Litvin.m4a" },
+    { Name = "Litvin",  File = "Litvin.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Litvin.mp3" },
     { Name = "Loader",  File = "Loader.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/Loader.mp3" },
     { Name = "Payment", File = "payment.mp3", Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/payment.mp3" },
     { Name = "Soft",    File = "soft.mp3",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/soft.mp3" },
     { Name = "Tuntun",  File = "tuntun.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/tuntun.mp3" },
-    { Name = "Vibe",    File = "vibe.m4a",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/vibe.m4a" },
+    { Name = "Vibe",    File = "vibe.mp3",    Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/vibe.mp3" },
     { Name = "Voiced",  File = "voiced.mp3",  Url = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/voiced.mp3" },
 }
 
