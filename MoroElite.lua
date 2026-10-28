@@ -998,7 +998,32 @@ local function cloneCharacter(plr)
     return copy
 end
 
--- opts: Player (default LocalPlayer), HeadOnly (close-up of the head, no rotation), Yaw (starting angle)
+-- loading ring: an accent circle whose bright arc keeps turning; returns a function that fades it out
+local function spinner(parent, size, z)
+    local ring = new("Frame", {
+        Parent = parent, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(size, size),
+        BackgroundTransparency = 1, ZIndex = z,
+    }, { corner("full") })
+    local st = new("UIStroke", { Parent = ring, Thickness = math.max(2, size / 14), Color = Theme.Accent })
+    trackAccent(st, "Color")
+    local grad = new("UIGradient", { Parent = st, Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.45, 0.15), NumberSequenceKeypoint.new(0.55, 1), NumberSequenceKeypoint.new(1, 1),
+    }) })
+    local t = 0
+    local conn = RunService.RenderStepped:Connect(function(dt)
+        t += dt
+        grad.Rotation = (t * 360) % 360
+        st.Transparency = 0.15 + math.sin(t * 4) * 0.15
+    end)
+    table.insert(Library._Conns, conn)
+    return function()
+        tween(st, { Transparency = 1 }, 0.25)
+        task.delay(0.26, function() conn:Disconnect() ring:Destroy() end)
+    end
+end
+
+-- opts: Player (default LocalPlayer), HeadOnly (close-up of the head, no rotation), Yaw (starting angle),
+-- OnFail (called when no character shows up within 10 s). A loading ring spins until the model is in.
 -- drag turns the model; a flick keeps spinning and eases out, left alone it slowly turns by itself
 local function characterView(parent, opts)
     opts = opts or {}
@@ -1045,7 +1070,29 @@ local function characterView(parent, opts)
             height = math.max(top - bottom, 3) * 1.12
         end
     end
-    load()
+    -- wait (up to 10 s) for the character and its full appearance, so the copy is not missing clothes/hats
+    vp.ImageTransparency = 1
+    -- (AbsoluteSize is still 0 while the window is being built, so the head ring sizes from the offset)
+    local headSize = parent.Size.X.Offset > 0 and parent.Size.X.Offset or 32
+    local stopSpin = spinner(parent, opts.HeadOnly and math.floor(headSize * 0.55 + 0.5) or 34, (opts.ZIndex or 1) + 1)
+    task.spawn(function()
+        local plr = opts.Player or LocalPlayer
+        local t0 = os.clock()
+        repeat
+            local char = plr.Character
+            local ready = char and char:FindFirstChild("HumanoidRootPart") and plr:HasAppearanceLoaded()
+            if ready then break end
+            task.wait(0.2)
+        until not vp.Parent or os.clock() - t0 > 10
+        if not vp.Parent then return end
+        load()
+        stopSpin()
+        if model then
+            tween(vp, { ImageTransparency = 0 }, 0.4)
+        elseif opts.OnFail then
+            call(opts.OnFail)
+        end
+    end)
 
     local hint
     if not opts.HeadOnly then
@@ -1097,23 +1144,13 @@ local function characterView(parent, opts)
     return { Viewport = vp, Refresh = load, HasModel = function() return model ~= nil end }
 end
 
--- fills a round frame with the player's avatar: headshot photo, or (when the thumbnail service fails,
--- which happens inside executors) a live 3D head; the first letter of the name shows until either loads
+-- fills a round frame with the player's avatar: a live 3D head (loading ring meanwhile);
+-- the first letter of the name only if no character turns up
 local function fillAvatar(parent, textSize, z)
-    local letter = new("TextLabel", { Parent = parent, Size = UDim2.fromScale(1, 1), Text = LocalPlayer.DisplayName:sub(1, 1):upper(), W = "Bold", TextSize = textSize or 15, ZIndex = z })
+    local letter = new("TextLabel", { Parent = parent, Size = UDim2.fromScale(1, 1), Text = LocalPlayer.DisplayName:sub(1, 1):upper(), W = "Bold", TextSize = textSize or 15, ZIndex = z, Visible = false })
     trackAccent(letter, "TextColor3")
-    local photo = new("ImageLabel", { Parent = parent, Size = UDim2.fromScale(1, 1), ZIndex = z, Image = ("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150"):format(LocalPlayer.UserId) }, { corner("full") })
-    task.spawn(function()
-        local t0 = os.clock()
-        repeat task.wait(0.25) until photo.IsLoaded or not photo.Parent or os.clock() - t0 > 4
-        if photo.IsLoaded or not photo.Parent then return end
-        local head = characterView(parent, { HeadOnly = true, ZIndex = z })
-        corner("full").Parent = head.Viewport
-        if head.HasModel() then
-            letter.Visible = false
-            photo.Visible = false
-        end
-    end)
+    local head = characterView(parent, { HeadOnly = true, ZIndex = z, OnFail = function() letter.Visible = true end })
+    corner("full").Parent = head.Viewport
 end
 
 ----------------------------------------------------------------------
@@ -2049,11 +2086,13 @@ function Section:AddCharacterPreview(cfg)
     floorGlow.Size = UDim2.new(0.8, 0, 0.35, 0)
     trackAccent(floorGlow, "ImageColor3")
     local tab = self.Tab
-    local view = characterView(stage, { Player = cfg.Player, ZIndex = 2, Active = function() return tab.Window.CurrentTab == tab and tab.Window.Open end })
+    local view = characterView(stage, {
+        Player = cfg.Player, ZIndex = 2, Active = function() return tab.Window.CurrentTab == tab and tab.Window.Open end,
+        OnFail = function()
+            new("TextLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), Text = "Character not loaded", TextColor3 = Theme.Dim, TextSize = 13, ZIndex = 3 })
+        end,
+    })
     local overlay = new("Frame", { Parent = stage, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 3 })
-    if not view.HasModel() then
-        new("TextLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), Text = "Character not loaded", TextColor3 = Theme.Dim, TextSize = 13, ZIndex = 3 })
-    end
     self.Window:_AddSearch(cfg.Name or "Character Preview", stage, self)
     return API({ Overlay = overlay }, { Refresh = view.Refresh })
 end
