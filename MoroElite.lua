@@ -35,6 +35,14 @@ local Library = {
         Soft = "soft.mp3", Payment = "payment.mp3", Tuntun = "tuntun.mp3", Voiced = "voiced.mp3", Litvin = "Litvin.mp3",
         Vibe = "vibe.mp3", Loader = "Loader.mp3", Warn = "Warn.mp3", Error = "Error.mp3",
     },
+    -- character art slots: upload artN.png to the repo's Art/ folder (or drop it into MoroLumina/Art) and it replaces the placeholder
+    ArtBaseUrl = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Art/",
+    Art = {
+        { Name = "Art 1", Image = "art1.png" },
+        { Name = "Art 2", Image = "art2.png" },
+        { Name = "Art 3", Image = "art3.png" },
+        { Name = "Art 4", Image = "art4.png" },
+    },
     LucideUrls = {
         "https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/lucide-roblox.luau",
         "https://github.com/latte-soft/lucide-roblox/releases/latest/download/lucide-roblox.luau",
@@ -94,6 +102,7 @@ local function initState()
     Library._soundCache = {}
     Library._queued = false
     Library._antiAfk, Library._antiLag = nil, nil
+    Library._artMissing = {}
 end
 initState()
 
@@ -2145,6 +2154,395 @@ end
 function Tab:Select() self.Window:SelectTab(self) end
 
 ----------------------------------------------------------------------
+-- Background effects: particles behind the window content (or the whole screen)
+----------------------------------------------------------------------
+local rnd = Random.new()
+local function rr(a, b) return rnd:NextNumber(a, b) end
+local function pick(t) return t[rnd:NextInteger(1, #t)] end
+
+local SAKURA = { rgb(255, 183, 213), rgb(255, 160, 200), rgb(255, 208, 226), rgb(248, 140, 186) }
+local EMBER = { rgb(255, 150, 60), rgb(255, 110, 40), rgb(255, 196, 90) }
+local RAIN_ANGLE = math.rad(14)
+local SHOOT_ANGLE = math.rad(25)
+
+-- n: particles at 100% density; make(layer, i) -> object; spawn(p, W, H, first); step(p, dt, t, W, H) -> dead.
+-- step writes the draw position to p.dx / p.dy (layer pixels) and optionally p.r (rotation).
+local Effects = {}
+Effects.Sakura = {
+    n = 28,
+    make = function(layer)
+        return new("Frame", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = pick(SAKURA), BackgroundTransparency = rr(0.1, 0.35) }, { corner("full") })
+    end,
+    spawn = function(p, W, H, first)
+        p.x, p.y = rr(-0.15, 1) * W, first and rr(0, H) or rr(-40, -12)
+        p.vx, p.vy = rr(10, 28), rr(26, 52)
+        p.amp, p.f, p.ph = rr(12, 32), rr(0.6, 1.4), rr(0, 6.28)
+        p.r, p.vr = rr(0, 360), rr(-100, 100)
+        p.w, p.h, p.flip = rr(8, 13), rr(5, 8), rr(1.5, 3.5)
+    end,
+    step = function(p, dt, t, W, H)
+        p.x += p.vx * dt
+        p.y += p.vy * dt
+        p.r += p.vr * dt
+        p.dx, p.dy = p.x + math.sin(t * p.f + p.ph) * p.amp, p.y
+        -- the petal "flips" in 3D: its width breathes
+        p.obj.Size = UDim2.fromOffset(p.w * (0.35 + 0.65 * math.abs(math.sin(t * p.flip + p.ph))), p.h)
+        return p.y > H + 20 or p.dx > W + 30
+    end,
+}
+Effects.Snow = {
+    n = 50,
+    make = function(layer)
+        local s = rr(2, 5)
+        return new("Frame", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(s, s), BackgroundColor3 = WHITE, BackgroundTransparency = rr(0.15, 0.6) }, { corner("full") })
+    end,
+    spawn = function(p, W, H, first)
+        local s = p.obj.Size.X.Offset
+        p.x, p.y = rr(0, 1) * W, first and rr(0, H) or rr(-20, -6)
+        p.vx, p.vy = rr(-6, 10), 10 + s * 7 + rr(0, 10) -- big flakes are closer, so faster
+        p.amp, p.f, p.ph = rr(4, 14), rr(0.5, 1.2), rr(0, 6.28)
+    end,
+    step = function(p, dt, t, W, H)
+        p.x += p.vx * dt
+        p.y += p.vy * dt
+        p.dx, p.dy = p.x + math.sin(t * p.f + p.ph) * p.amp, p.y
+        return p.y > H + 10
+    end,
+}
+Effects.Rain = {
+    n = 60,
+    make = function(layer)
+        local f = new("Frame", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(1, rr(10, 22)), BackgroundColor3 = rgb(170, 200, 255), BackgroundTransparency = rr(0.4, 0.7), Rotation = -math.deg(RAIN_ANGLE) })
+        new("UIGradient", { Parent = f, Rotation = 90, Transparency = NumberSequence.new(1, 0) })
+        return f
+    end,
+    spawn = function(p, W, H, first)
+        p.x, p.y = rr(-0.3, 1) * W, first and rr(0, H) or rr(-60, -20)
+        p.vy = rr(420, 620)
+        p.vx = p.vy * math.tan(RAIN_ANGLE)
+    end,
+    step = function(p, dt, t, W, H)
+        p.x += p.vx * dt
+        p.y += p.vy * dt
+        p.dx, p.dy = p.x, p.y
+        return p.y > H + 30
+    end,
+}
+Effects.Stars = {
+    n = 55,
+    make = function(layer, i)
+        if i == 1 then -- the shooting star; bright head on the left, tail fading to the right
+            local f = new("Frame", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(80, 2), BackgroundColor3 = WHITE, BackgroundTransparency = 1, Rotation = -math.deg(SHOOT_ANGLE) }, { corner("full") })
+            new("UIGradient", { Parent = f, Transparency = NumberSequence.new(0, 1) })
+            return f
+        end
+        local s = rr(1.5, 3.2)
+        local f = new("Frame", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(s, s), BackgroundColor3 = pick({ WHITE, rgb(200, 215, 255), rgb(255, 240, 210) }) }, { corner("full") })
+        if s > 2.7 then glow(f, WHITE, 12, 0.65) end
+        return f
+    end,
+    spawn = function(p, W, H, first)
+        if p.i == 1 then
+            p.wait, p.life = rr(first and 1 or 2.5, first and 3 or 7), 0
+            p.x, p.y = rr(0.35, 1.1) * W, rr(-0.05, 0.35) * H
+            return
+        end
+        p.x, p.y = rr(0, 1) * W, rr(0, 1) * H
+        p.base, p.f, p.ph = rr(0.05, 0.4), rr(0.8, 2.5), rr(0, 6.28)
+    end,
+    step = function(p, dt, t, W, H)
+        p.dx, p.dy = p.x, p.y
+        if p.i == 1 then
+            if p.wait > 0 then
+                p.wait -= dt
+                return false
+            end
+            p.life += dt
+            p.x -= math.cos(SHOOT_ANGLE) * 700 * dt
+            p.y += math.sin(SHOOT_ANGLE) * 700 * dt
+            p.obj.BackgroundTransparency = math.clamp(math.max(1 - p.life / 0.12, (p.life - 0.45) / 0.35), 0, 1)
+            if p.life > 0.8 then p.obj.BackgroundTransparency = 1 return true end
+            return false
+        end
+        p.obj.BackgroundTransparency = p.base + (0.5 + 0.5 * math.sin(t * p.f + p.ph)) * 0.55
+        return false
+    end,
+}
+Effects.Fireflies = {
+    n = 22,
+    make = function(layer)
+        local s = rr(14, 26)
+        local g = new("ImageLabel", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(s, s), Image = IMG_GLOW, ImageColor3 = Theme.Accent, ImageTransparency = 0.5 })
+        new("Frame", { Parent = g, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(3, 3), BackgroundColor3 = WHITE, BackgroundTransparency = 0.2 }, { corner("full") })
+        return g
+    end,
+    spawn = function(p, W, H)
+        p.x, p.y = rr(0, 1) * W, rr(0, 1) * H
+        p.a, p.sp, p.f, p.ph = rr(0, 6.28), rr(10, 26), rr(0.4, 1.1), rr(0, 6.28)
+    end,
+    step = function(p, dt, t, W, H)
+        p.a += math.sin(t * p.f + p.ph) * dt * 1.6
+        p.x = (p.x + math.cos(p.a) * p.sp * dt) % W
+        p.y = (p.y + math.sin(p.a) * p.sp * dt) % H
+        p.dx, p.dy = p.x, p.y
+        p.obj.ImageColor3 = Theme.Accent
+        p.obj.ImageTransparency = 0.3 + 0.55 * (0.5 + 0.5 * math.sin(t * p.f * 3 + p.ph))
+        return false
+    end,
+}
+Effects.Embers = {
+    n = 30,
+    make = function(layer)
+        local c = pick(EMBER)
+        local s = rr(8, 16)
+        local g = new("ImageLabel", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(s, s), Image = IMG_GLOW, ImageColor3 = c })
+        new("Frame", { Parent = g, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(2, 2), BackgroundColor3 = c:Lerp(WHITE, 0.5) }, { corner("full") })
+        return g
+    end,
+    spawn = function(p, W, H, first)
+        p.x, p.y = rr(0, 1) * W, first and rr(0, H) or H + rr(5, 30)
+        p.vy, p.amp, p.f, p.ph = rr(30, 70), rr(6, 20), rr(0.8, 2), rr(0, 6.28)
+    end,
+    step = function(p, dt, t, W, H)
+        p.y -= p.vy * dt
+        p.dx, p.dy = p.x + math.sin(t * p.f + p.ph) * p.amp, p.y
+        -- bright near the bottom, burning out on the way up
+        local k = math.clamp(p.y / H, 0, 1)
+        p.obj.ImageTransparency = 1 - 0.8 * k
+        p.obj:FindFirstChildOfClass("Frame").BackgroundTransparency = 1 - k
+        return p.y < -20
+    end,
+}
+Effects.Bubbles = {
+    n = 18,
+    make = function(layer)
+        local s = rr(6, 20)
+        local f = new("Frame", { Parent = layer, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(s, s), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93 }, {
+            corner("full"), new("UIStroke", { Color = WHITE, Transparency = 0.55, Thickness = 1 }),
+        })
+        new("Frame", { Parent = f, Position = UDim2.fromScale(0.22, 0.2), Size = UDim2.fromScale(0.22, 0.22), BackgroundColor3 = WHITE, BackgroundTransparency = 0.35 }, { corner("full") })
+        return f
+    end,
+    spawn = function(p, W, H, first)
+        p.x, p.y = rr(0, 1) * W, first and rr(0, H) or H + rr(10, 40)
+        p.vy, p.amp, p.f, p.ph = rr(18, 40), rr(5, 15), rr(0.6, 1.4), rr(0, 6.28)
+    end,
+    step = function(p, dt, t, W, H)
+        p.y -= p.vy * dt
+        p.dx, p.dy = p.x + math.sin(t * p.f + p.ph) * p.amp, p.y
+        return p.y < -30
+    end,
+}
+Library.EffectNames = { "Off", "Sakura", "Snow", "Rain", "Stars", "Fireflies", "Embers", "Bubbles" }
+
+local function buildEffects(win)
+    local E = { Name = "Off", Density = 1, Fullscreen = false, parts = {} }
+    -- window layer: over the content (not Active, so clicks pass through), under popups; screen layer: behind the whole window
+    local winLayer = new("Frame", { Parent = win.Canvas, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 45 })
+    local screenLayer = new("Frame", { Parent = win.Gui, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, ZIndex = 0 })
+    local function layer() return E.Fullscreen and screenLayer or winLayer end
+    local function dims()
+        local sz = layer().AbsoluteSize
+        return math.max(sz.X, 50), math.max(sz.Y, 50)
+    end
+    local function rebuild()
+        for _, p in ipairs(E.parts) do p.obj:Destroy() end
+        table.clear(E.parts)
+        local def = Effects[E.Name]
+        if not def then return end
+        local L = layer()
+        local W, H = dims()
+        for i = 1, math.max(2, math.floor(def.n * E.Density + 0.5)) do
+            local p = { i = i }
+            p.obj = def.make(L, i)
+            def.spawn(p, W, H, true)
+            table.insert(E.parts, p)
+        end
+    end
+    -- slider drags fire every frame: rebuild once they settle
+    local queued = false
+    local function queue()
+        if queued then return end
+        queued = true
+        task.delay(0.08, function() queued = false rebuild() end)
+    end
+
+    local t = 0
+    connect(RunService.RenderStepped, function(dt)
+        if #E.parts == 0 or not win.Open then return end
+        dt = math.min(dt, 0.1)
+        t += dt
+        local def = Effects[E.Name]
+        local W, H = dims()
+        for _, p in ipairs(E.parts) do
+            if def.step(p, dt, t, W, H) then def.spawn(p, W, H, false) end
+            local o = p.obj
+            o.Position = UDim2.fromScale(p.dx / W, p.dy / H)
+            if p.r then o.Rotation = p.r end
+        end
+    end)
+
+    function E.Set(name)
+        E.Name = Effects[name] and name or "Off"
+        rebuild()
+    end
+    function E.SetDensity(d)
+        E.Density = math.clamp(tonumber(d) or 1, 0.2, 3)
+        queue()
+    end
+    function E.SetFullscreen(b)
+        E.Fullscreen = b and true or false
+        screenLayer.Visible = E.Fullscreen and win.Open
+        rebuild()
+    end
+    function E.OnToggle(open)
+        if open then screenLayer.Visible = E.Fullscreen
+        else task.delay(0.2, function() if not win.Open then screenLayer.Visible = false end end) end
+    end
+    return E
+end
+
+----------------------------------------------------------------------
+-- Character art: a PNG standing next to the window. Slots without a picture show a placeholder.
+----------------------------------------------------------------------
+local function isImage(body)
+    return type(body) == "string" and #body > 200 and (body:sub(1, 4) == "\137PNG" or body:sub(1, 3) == "\255\216\255")
+end
+
+-- entry.Image: "rbxassetid://..", an asset id, an http(s) url or a file name (looked up in <Folder>/Art, then ArtBaseUrl)
+function Library:_ArtAsset(entry)
+    local img = tostring(entry.Image or entry.File or "")
+    if img == "" then return nil end
+    if img:find("^rbxasset") or img:find("^rbxthumb") or img:find("^rbxgameasset") then return img end
+    if tonumber(img) then return "rbxassetid://" .. img end
+    local ca = getcustomasset or getsynasset
+    if not ca then return nil end
+    local url, file
+    if img:find("^https?://") then
+        url = img
+        file = (img:gsub("[?#].*$", "")):match("[^/]+$") or "art.png"
+    else
+        url, file = self.ArtBaseUrl .. img, img
+    end
+    local path = self.Folder .. "/Art/" .. file
+    if not FS.isfile(path) and not self._artMissing[url] then
+        local body = httpGet(url)
+        if isImage(body) then
+            FS.mkdirs(self.Folder .. "/Art")
+            FS.write(path, body)
+        else
+            self._artMissing[url] = true
+        end
+    end
+    if FS.isfile(path) then
+        local ok, id = pcall(ca, path)
+        if ok and id then return id end
+    end
+    return nil
+end
+
+local function artPlaceholder(parent, name)
+    local f = new("Frame", { Parent = parent, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Card, BackgroundTransparency = 0.08, ClipsDescendants = true }, { corner(22) })
+    local st = new("UIStroke", { Parent = f, Color = Theme.Accent, Transparency = 0.45, Thickness = 1.5 })
+    trackAccent(st, "Color")
+    local haze = new("Frame", { Parent = f, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Accent }, { corner(22), new("UIGradient", { Rotation = 90, Transparency = NumberSequence.new(1, 0.72) }) })
+    trackAccent(haze, "BackgroundColor3")
+    -- bust silhouette: head and shoulders
+    local head = new("Frame", { Parent = f, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(0.36, 0.36), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.72 }, {
+        corner("full"), new("UIAspectRatioConstraint", { AspectRatio = 1 }),
+    })
+    trackAccent(head, "BackgroundColor3")
+    local body = new("Frame", { Parent = f, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0.67), Size = UDim2.fromScale(0.8, 0.45), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.72 }, {
+        new("UICorner", { CornerRadius = UDim.new(0.45, 0) }),
+    })
+    trackAccent(body, "BackgroundColor3")
+    local _, ic = makeIcon(f, "image", 20, Theme.Accent, nil, UDim2.new(0.5, 0, 0, 34), Vector2.new(0.5, 0.5))
+    if ic then onAccent(function() if ic:IsA("ImageLabel") then ic.ImageColor3 = Theme.Accent else ic.TextColor3 = Theme.Accent end end) end
+    new("TextLabel", { Parent = f, Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 0, 20), Text = string.upper(name or "Art"), W = "Bold", TextSize = 16 })
+    new("TextLabel", { Parent = f, Position = UDim2.fromOffset(0, 72), Size = UDim2.new(1, 0, 0, 14), Text = "PNG coming soon", W = "Regular", TextSize = 11, TextColor3 = Theme.Dim })
+    return f
+end
+
+local function buildArt(win, cfg)
+    local A = { List = {}, Name = "Off", Side = "Right", Front = false, Size = 1.1, Opacity = 1 }
+    if cfg.Art ~= false then A.List = type(cfg.Art) == "table" and cfg.Art or Library.Art end
+    local ratio = new("UIAspectRatioConstraint", { AspectRatio = 0.62, DominantAxis = Enum.DominantAxis.Height })
+    local holder = new("CanvasGroup", {
+        Parent = win.Root, AnchorPoint = Vector2.new(0.3, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromScale(5, A.Size), -- the aspect constraint shrinks the width
+        BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = 1,
+    }, { ratio })
+    local stage = new("Frame", { Parent = holder, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 })
+    A.Holder = holder
+
+    local function home() return UDim2.fromScale(A.Side == "Left" and 0 or 1, 1) end
+    local token = 0
+    local function render()
+        token += 1
+        local my = token
+        stage:ClearAllChildren()
+        local entry = A.Current
+        holder.Visible = entry ~= nil
+        if not entry then return end
+        ratio.AspectRatio = entry.Ratio or 0.62
+        local ph = artPlaceholder(stage, entry.Name)
+        task.spawn(function()
+            local id = Library:_ArtAsset(entry)
+            if my ~= token or not id then return end
+            local img = new("ImageLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Fit, Image = id, ImageTransparency = 1 })
+            tween(img, { ImageTransparency = 0 }, 0.3)
+            tween(ph, { BackgroundTransparency = 1 }, 0.2)
+            task.delay(0.21, function() ph:Destroy() end)
+        end)
+    end
+    function A.Place()
+        -- behind the window: 30% tucked under its edge; in front: overlapping the corner a bit more
+        local right = A.Side ~= "Left"
+        local k = A.Front and 0.42 or 0.3
+        holder.ZIndex = A.Front and 3 or 1
+        holder.AnchorPoint = Vector2.new(right and k or 1 - k, 1)
+        holder.Position = home()
+        holder.Size = UDim2.fromScale(5, A.Size)
+        if win.Open and A.Current then tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.25) end
+    end
+    function A.Set(name)
+        A.Name, A.Current = tostring(name), nil
+        if A.Name == "Random" and #A.List > 0 then
+            A.Current = A.List[rnd:NextInteger(1, #A.List)]
+        else
+            for _, e in ipairs(A.List) do if e.Name == A.Name then A.Current = e end end
+        end
+        render()
+        A.Place()
+    end
+    function A.Names()
+        local t = { "Off", "Random" }
+        for _, e in ipairs(A.List) do table.insert(t, e.Name) end
+        return t
+    end
+    function A.OnToggle(open)
+        if not A.Current then return end
+        if open then
+            -- slides in from outside the window a moment after it opens
+            holder.Position = home() + UDim2.fromOffset(A.Side == "Left" and -30 or 30, 0)
+            holder.GroupTransparency = 1
+            task.delay(0.1, function()
+                if win.Open then tween(holder, { GroupTransparency = 1 - A.Opacity, Position = home() }, 0.55, Enum.EasingStyle.Quint) end
+            end)
+        else
+            tween(holder, { GroupTransparency = 1 }, 0.18)
+        end
+    end
+    -- idle float
+    local t = 0
+    connect(RunService.RenderStepped, function(dt)
+        if not (win.Open and holder.Visible) then return end
+        t += dt
+        stage.Position = UDim2.fromOffset(0, -(0.5 + 0.5 * math.sin(t * 1.3)) * 6)
+    end)
+    return A
+end
+
+----------------------------------------------------------------------
 -- Library:CreateWindow
 ----------------------------------------------------------------------
 local function getGuiParent()
@@ -2211,7 +2609,7 @@ function Library:CreateWindow(cfg)
 
     local Canvas = new("CanvasGroup", {
         Parent = Root, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), GroupTransparency = 1,
-        BackgroundColor3 = Theme.Bg, ZIndex = 1, Active = true, -- clicks on the menu never reach game UI / world behind it
+        BackgroundColor3 = Theme.Bg, ZIndex = 2, Active = true, -- clicks on the menu never reach game UI / world behind it
     }, { corner(14) })
     stroke(WHITE, 0.9).Parent = Canvas
     win.Canvas = Canvas
@@ -2220,6 +2618,9 @@ function Library:CreateWindow(cfg)
     -- ambient accent light in the top-right corner of the content
     local ambient = new("ImageLabel", { Parent = Canvas, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -60, 0, 0), Size = UDim2.fromOffset(520, 340), Image = IMG_GLOW, ImageTransparency = 0.9 })
     trackAccent(ambient, "ImageColor3")
+
+    win.Effects = buildEffects(win)
+    win.Art = buildArt(win, cfg)
 
     -- Cursor-lock bypass
     new("TextButton", { Parent = Canvas, Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, Text = "", Modal = true })
@@ -2718,6 +3119,9 @@ function Library:CreateWindow(cfg)
     -- once the splash is gone, show for 2 s where the menu can be reopened from
     if cfg.OpenGuide ~= false then task.delay(1.7, function() if Library.Window == win then win:ShowOpenGuide(2) end end) end
 
+    win.Effects.Set(cfg.Effect or "Sakura")
+    win.Art.Set(cfg.ArtDefault or (cfg.Art == false and "Off") or "Art 1")
+
     win.Open = false
     win:Toggle(true)
     return win
@@ -2863,6 +3267,8 @@ function Window:Toggle(state)
     if state == self.Open then return end
     self.Open = state
     if self._barLook then self._barLook() end
+    self.Effects.OnToggle(state)
+    self.Art.OnToggle(state)
     self:_ClosePopup()
     if self._hideSearch then self._hideSearch() end
     if Library._tipTarget then Library._tipTarget = nil self:_HideTip() end
@@ -2890,6 +3296,20 @@ function Window:Toggle(state)
         end)
     end
 end
+
+-- background particles: Library.EffectNames ("Off", "Sakura", "Snow", "Rain", "Stars", "Fireflies", "Embers", "Bubbles")
+function Window:SetEffect(name) self.Effects.Set(name) end
+function Window:GetEffect() return self.Effects.Name end
+function Window:SetEffectDensity(d) self.Effects.SetDensity(d) end
+function Window:SetEffectFullscreen(b) self.Effects.SetFullscreen(b) end
+
+-- character art next to the window: "Off", "Random" or a slot name from Library.Art / cfg.Art
+function Window:SetArt(name) self.Art.Set(name) end
+function Window:GetArt() return self.Art.Name end
+function Window:SetArtSide(side) self.Art.Side = side == "Left" and "Left" or "Right" self.Art.Place() end
+function Window:SetArtFront(b) self.Art.Front = b and true or false self.Art.Place() end
+function Window:SetArtSize(k) self.Art.Size = math.clamp(tonumber(k) or 1.1, 0.4, 2) self.Art.Place() end
+function Window:SetArtOpacity(k) self.Art.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.Art.Place() end
 
 function Window:SetBlur(b)
     self.BlurEnabled = b and true or false
@@ -3558,6 +3978,19 @@ function Window:AddSettingsTab()
         win:ShowOpenGuide(2)
     end })
     iface:AddButton({ Name = "Reset Window Size", Icon = "maximize-2", NoFastMenu = true, Callback = function() win:SetSize(DEF_W, DEF_H, true) end })
+
+    -- Atmosphere: background particles and the character art
+    local atm = L:CreateSection({ Name = "Atmosphere", Icon = "sparkles", Collapsible = true })
+    atm:AddDropdown({ Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
+    atm:AddSlider({ Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
+    atm:AddToggle({ Name = "Full Screen Effect", NoFastMenu = true, Tooltip = "Particles fill the screen behind the menu, not only the window", Callback = function(v) win:SetEffectFullscreen(v) end })
+    if #win.Art.List > 0 then
+        atm:AddDropdown({ Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
+        atm:AddDropdown({ Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
+        atm:AddToggle({ Name = "Art In Front", NoFastMenu = true, Tooltip = "Draw the art over the window edge instead of behind it", Callback = function(v) win:SetArtFront(v) end })
+        atm:AddSlider({ Name = "Art Size", Min = 50, Max = 160, Default = win.Art.Size * 100, Suffix = "%", Callback = function(v) win:SetArtSize(v / 100) end })
+        atm:AddSlider({ Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
+    end
 
     -- Fast Menu
     local fm = self.FastMenu
