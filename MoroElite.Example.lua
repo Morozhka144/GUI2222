@@ -5,6 +5,7 @@ local Window = Library:CreateWindow({
     Subtitle = "Doors · Premium",
     ToggleKey = Enum.KeyCode.RightShift,
     TeleportFile = "Doors.lua",
+    TopButtons = { "bell" }, -- optional extra top-bar buttons: bell, key, settings, user
 })
 
 Window:AddTabLabel("Main")
@@ -31,8 +32,18 @@ Misc:AddButton({ Name = "Say hi", Icon = "sparkles", Primary = true, Callback = 
 end })
 Misc:AddButton({ Name = "Warn me", Callback = function() Window:Notify({ Title = "Careful", Text = "Entity incoming", Type = "warning" }) end })
 
-local esp = Visuals:CreateSection({ Name = "ESP", Icon = "scan-eye" })
+local preview = Visuals:Column("left"):CreateSection({ Name = "Preview", Icon = "scan-eye" })
+preview:AddCharacterPreview({ Height = 260 })
+local esp = Visuals:Column("right"):CreateSection({ Name = "ESP", Icon = "eye" })
 esp:AddToggle({ Name = "Doors ESP" })
 esp:AddToggle({ Name = "Item ESP" })
+
+-- the profile (click your card bottom-left) has universal Account / Session info;
+-- each script adds its own stats there
+local hubStats = Window:GetProfileTab():Column("left"):CreateSection({ Name = "Moro Hub", Icon = "sparkles" })
+local started = os.clock()
+hubStats:AddStat({ Name = "Speed Hack", Get = function() return speed:Get() and '<font color="#3CDC82">ON</font>' or "off" end })
+hubStats:AddStat({ Name = "Walk Speed", Get = function() return Library.Flags["Walk Speed"].Get() .. " st" end })
+hubStats:AddStat({ Name = "Script Uptime", Get = function() return math.floor(os.clock() - started) .. " s" end })
 
 Window:AddSettingsTab()

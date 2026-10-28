@@ -945,6 +945,178 @@ local function buildPicker(parent, init, onChange)
 end
 
 ----------------------------------------------------------------------
+-- 3D character view (ViewportFrame with a copy of the character)
+----------------------------------------------------------------------
+-- copy of a player's character that can live in a ViewportFrame: scripts, sounds, name tags and tools
+-- removed, every part anchored so the pose stays as it was at the moment of copying
+local function cloneCharacter(plr)
+    local char = plr and plr.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    local ok, copy = pcall(function()
+        local archivable = char.Archivable
+        char.Archivable = true
+        local c = char:Clone()
+        char.Archivable = archivable
+        return c
+    end)
+    if not ok or not copy then return nil end
+    for _, d in ipairs(copy:GetDescendants()) do
+        if d:IsA("LuaSourceContainer") or d:IsA("Sound") or d:IsA("BillboardGui") or d:IsA("ForceField")
+            or d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") or d:IsA("Tool") then
+            d:Destroy()
+        elseif d:IsA("BasePart") then
+            d.Anchored = true
+        end
+    end
+    -- the copy is frozen mid-animation; rebuild the rest pose by putting every part where its joint
+    -- says (C0/C1 without the animation Transform), walking outwards from the root
+    local root = copy:FindFirstChild("HumanoidRootPart")
+    local joints = {}
+    for _, j in ipairs(copy:GetDescendants()) do
+        if j:IsA("JointInstance") and j.Part0 and j.Part1 then table.insert(joints, j) end
+    end
+    local placed = { [root] = true }
+    for _ = 1, 32 do
+        local progress = false
+        for _, j in ipairs(joints) do
+            if placed[j.Part0] and not placed[j.Part1] then
+                j.Part1.CFrame = j.Part0.CFrame * j.C0 * j.C1:Inverse()
+                placed[j.Part1], progress = true, true
+            elseif placed[j.Part1] and not placed[j.Part0] then
+                j.Part0.CFrame = j.Part1.CFrame * j.C1 * j.C0:Inverse()
+                placed[j.Part0], progress = true, true
+            end
+        end
+        if not progress then break end
+    end
+    local hum = copy:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        hum.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+    end
+    copy:PivotTo(CFrame.new(0, 3, 0))
+    return copy
+end
+
+-- opts: Player (default LocalPlayer), HeadOnly (close-up of the head, no rotation), Yaw (starting angle)
+-- drag turns the model; a flick keeps spinning and eases out, left alone it slowly turns by itself
+local function characterView(parent, opts)
+    opts = opts or {}
+    local vp = new("ViewportFrame", {
+        Parent = parent, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, LightColor = WHITE,
+        Ambient = rgb(150, 150, 165), LightDirection = Vector3.new(-0.6, -1, -0.8), ZIndex = opts.ZIndex or 1,
+    })
+    local world = Instance.new("WorldModel")
+    world.Parent = vp
+    local cam = Instance.new("Camera")
+    cam.FieldOfView = opts.HeadOnly and 22 or 30
+    cam.Parent = vp
+    vp.CurrentCamera = cam
+
+    local model, centre, height
+    -- the copy faces -Z, so the camera starts on that side (a bit to the right) to see the face, not the back
+    local yaw, spin, idle, dragging = opts.Yaw or (math.pi - 0.35), 0, 2, false
+    local function load()
+        if model then model:Destroy() end
+        model = cloneCharacter(opts.Player or LocalPlayer)
+        if not model then return end
+        model.Parent = world
+        local head = model:FindFirstChild("Head")
+        local root = model:FindFirstChild("HumanoidRootPart")
+        if opts.HeadOnly and head then
+            centre, height = head.Position, 2
+        else
+            -- frame the body itself: only parts sitting directly in the model (accessories live inside
+            -- Accessory instances), so held weapons, wings or hats do not shrink or shift the figure
+            local top, bottom = -math.huge, math.huge
+            for _, p in ipairs(model:GetChildren()) do
+                if p:IsA("BasePart") and p ~= root then
+                    local half = p.Size.Y / 2
+                    top = math.max(top, p.Position.Y + half)
+                    bottom = math.min(bottom, p.Position.Y - half)
+                end
+            end
+            if top == -math.huge then
+                local cf, size = model:GetBoundingBox()
+                top, bottom = cf.Position.Y + size.Y / 2, cf.Position.Y - size.Y / 2
+            end
+            local base = root and root.Position or Vector3.new(0, (top + bottom) / 2, 0)
+            centre = Vector3.new(base.X, (top + bottom) / 2, base.Z)
+            height = math.max(top - bottom, 3) * 1.12
+        end
+    end
+    load()
+
+    local hint
+    if not opts.HeadOnly then
+        hint = new("TextLabel", {
+            Parent = parent, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -8), Size = UDim2.fromOffset(0, 14),
+            AutomaticSize = Enum.AutomaticSize.X, Text = "drag to rotate", TextSize = 11, W = "Regular", TextColor3 = Theme.Dim, ZIndex = (opts.ZIndex or 1) + 1,
+        })
+        local grab = new("TextButton", { Parent = parent, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = (opts.ZIndex or 1) + 2 })
+        local lastX, lastT
+        dragRegion(grab, function(p)
+            local now = os.clock()
+            if lastX then
+                local dx = p.X - lastX
+                yaw -= dx * 0.012
+                spin = -dx * 0.012 / math.max(now - lastT, 1 / 240)
+            end
+            lastX, lastT = p.X, now
+        end, function()
+            dragging, lastX, idle = true, nil, 0
+            if hint then hint.Visible = false end
+        end, function()
+            dragging, idle = false, 0
+        end)
+    end
+
+    local conn
+    conn = RunService.RenderStepped:Connect(function(dt)
+        if not vp.Parent then conn:Disconnect() return end
+        if not centre or vp.AbsoluteSize.X < 2 then return end
+        if opts.Active and not opts.Active() then return end -- page not shown: skip the camera work
+        if not opts.HeadOnly and not dragging then
+            spin *= math.exp(-dt * 3.2)
+            idle += dt
+            yaw += spin * dt + (idle > 1.4 and 0.38 * dt or 0)
+        end
+        local dist = (height * 0.5) / math.tan(math.rad(cam.FieldOfView) * 0.5) * (opts.HeadOnly and 1.25 or 1.18)
+        local eye = centre + (CFrame.Angles(0, yaw, 0) * CFrame.new(0, opts.HeadOnly and 0.1 or 0.6, dist)).Position
+        cam.CFrame = CFrame.lookAt(eye, centre)
+    end)
+    table.insert(Library._Conns, conn)
+
+    local charConn = (opts.Player or LocalPlayer).CharacterAppearanceLoaded:Connect(function()
+        task.wait(0.5)
+        if vp.Parent then load() end
+    end)
+    table.insert(Library._Conns, charConn)
+    vp.Destroying:Connect(function() conn:Disconnect() charConn:Disconnect() end)
+
+    return { Viewport = vp, Refresh = load, HasModel = function() return model ~= nil end }
+end
+
+-- fills a round frame with the player's avatar: headshot photo, or (when the thumbnail service fails,
+-- which happens inside executors) a live 3D head; the first letter of the name shows until either loads
+local function fillAvatar(parent, textSize, z)
+    local letter = new("TextLabel", { Parent = parent, Size = UDim2.fromScale(1, 1), Text = LocalPlayer.DisplayName:sub(1, 1):upper(), W = "Bold", TextSize = textSize or 15, ZIndex = z })
+    trackAccent(letter, "TextColor3")
+    local photo = new("ImageLabel", { Parent = parent, Size = UDim2.fromScale(1, 1), ZIndex = z, Image = ("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150"):format(LocalPlayer.UserId) }, { corner("full") })
+    task.spawn(function()
+        local t0 = os.clock()
+        repeat task.wait(0.25) until photo.IsLoaded or not photo.Parent or os.clock() - t0 > 4
+        if photo.IsLoaded or not photo.Parent then return end
+        local head = characterView(parent, { HeadOnly = true, ZIndex = z })
+        corner("full").Parent = head.Viewport
+        if head.HasModel() then
+            letter.Visible = false
+            photo.Visible = false
+        end
+    end)
+end
+
+----------------------------------------------------------------------
 -- Floating HUD panels (Fast Menu / Keybinds)
 ----------------------------------------------------------------------
 local function makePanel(win, title, icon, defaultPos)
@@ -1818,6 +1990,74 @@ function Section:AddKeybind(cfg)
     return API({}, fns)
 end
 
+-- "name ............ value" row; cfg: Name, Value (fixed text) or Get (function, re-read every
+-- Interval seconds, default 1), Copy = true adds a copy button. Returns { Set(text), Refresh() }
+function Section:AddStat(cfg)
+    cfg = cfg or {}
+    local name = cfg.Name or "Stat"
+    local row, label = mkRow(self, 34, name, cfg.Description)
+    label.TextColor3 = Theme.Sub
+    local right = rightBox(row, label)
+    local value = new("TextLabel", {
+        Parent = right, LayoutOrder = 1, Size = UDim2.fromOffset(0, 20), AutomaticSize = Enum.AutomaticSize.X, Text = tostring(cfg.Value or "-"),
+        W = "SemiBold", TextSize = 13, RichText = true, ZIndex = 4,
+    })
+    if cfg.Copy then
+        local cb = new("TextButton", { Parent = right, LayoutOrder = 2, Size = UDim2.fromOffset(22, 22), BackgroundColor3 = Theme.Field, Text = "", ZIndex = 4 }, { corner(6) })
+        local _, ic, it = makeIcon(cb, "copy", 12, Theme.Dim, "c")
+        ic.ZIndex = 5
+        cb.MouseEnter:Connect(function() tintIcon(ic, it, Theme.Text) end)
+        cb.MouseLeave:Connect(function() tintIcon(ic, it, Theme.Dim) end)
+        cb.MouseButton1Click:Connect(function()
+            local sc = setclipboard or toclipboard
+            if sc then pcall(sc, (value.Text:gsub("<[^>]+>", ""))) end
+            self.Window:Notify({ Title = name, Text = "Copied to clipboard", Type = "success", Sound = false, Duration = 2 })
+        end)
+    end
+    local tab = self.Tab
+    local function refresh()
+        if not cfg.Get then return end
+        local ok, v = pcall(cfg.Get)
+        value.Text = ok and tostring(v) or "-"
+    end
+    if cfg.Get then
+        refresh()
+        task.spawn(function()
+            while row.Parent do
+                -- only while its page is on screen; values are re-read the moment it shows up again
+                if tab.Window.Open and tab.Window.CurrentTab == tab then refresh() end
+                task.wait(cfg.Interval or 1)
+            end
+        end)
+    end
+    self.Window:_AddSearch(name, row, self)
+    return API({}, { Set = function(t) value.Text = tostring(t) end, Refresh = refresh })
+end
+
+-- 3D model of a player's character; cfg: Name, Height (default 240), Player (default LocalPlayer)
+-- returns { Refresh(), Overlay } - Overlay is a frame above the model for your own drawings (ESP sample etc.)
+function Section:AddCharacterPreview(cfg)
+    cfg = cfg or {}
+    local stage = new("Frame", {
+        Parent = self.Content, LayoutOrder = nextOrder(self), Size = UDim2.new(1, 0, 0, cfg.Height or 240), BackgroundColor3 = WHITE,
+        BackgroundTransparency = 0.97, ClipsDescendants = true,
+    }, { corner(10), stroke(WHITE, 0.93) })
+    new("UIGradient", { Parent = stage, Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.6, 0.6), NumberSequenceKeypoint.new(1, 0) }) })
+    local floorGlow = glow(stage, Theme.Accent, 0, 0.82, 1)
+    floorGlow.AnchorPoint = Vector2.new(0.5, 1)
+    floorGlow.Position = UDim2.fromScale(0.5, 1.15)
+    floorGlow.Size = UDim2.new(0.8, 0, 0.35, 0)
+    trackAccent(floorGlow, "ImageColor3")
+    local tab = self.Tab
+    local view = characterView(stage, { Player = cfg.Player, ZIndex = 2, Active = function() return tab.Window.CurrentTab == tab and tab.Window.Open end })
+    local overlay = new("Frame", { Parent = stage, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 3 })
+    if not view.HasModel() then
+        new("TextLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), Text = "Character not loaded", TextColor3 = Theme.Dim, TextSize = 13, ZIndex = 3 })
+    end
+    self.Window:_AddSearch(cfg.Name or "Character Preview", stage, self)
+    return API({ Overlay = overlay }, { Refresh = view.Refresh })
+end
+
 function Section:AddColorPicker(cfg)
     cfg = cfg or {}
     local win = self.Window
@@ -1998,13 +2238,24 @@ function Library:CreateWindow(cfg)
     local avWrap = new("Frame", { Parent = card, Position = UDim2.fromOffset(9, 9), Size = UDim2.fromOffset(34, 34), BackgroundColor3 = Theme.Field, ZIndex = 4 }, { corner("full") })
     local avStroke = new("UIStroke", { Parent = avWrap, Thickness = 1.5, Color = Theme.Accent })
     trackAccent(avStroke, "Color")
-    local initial = new("TextLabel", { Parent = avWrap, Size = UDim2.fromScale(1, 1), Text = LocalPlayer.DisplayName:sub(1, 1):upper(), W = "Bold", TextSize = 15, ZIndex = 4 })
-    trackAccent(initial, "TextColor3")
-    local avatar = new("ImageLabel", { Parent = avWrap, Size = UDim2.fromScale(1, 1), ZIndex = 4 }, { corner("full") })
-    new("Frame", { Parent = avWrap, AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1.05, 1.05), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = Theme.Good, ZIndex = 5 }, { corner("full"), new("UIStroke", { Thickness = 2, Color = Theme.Card }) })
-    avatar.Image = ("rbxthumb://type=AvatarHeadShot&id=%d&w=150&h=150"):format(LocalPlayer.UserId)
-    new("TextLabel", { Parent = card, Position = UDim2.fromOffset(51, 9), Size = UDim2.new(1, -58, 0, 17), Text = LocalPlayer.DisplayName, TextSize = 14, W = "SemiBold", TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
-    new("TextLabel", { Parent = card, Position = UDim2.fromOffset(51, 27), Size = UDim2.new(1, -58, 0, 14), Text = "@" .. LocalPlayer.Name, TextSize = 12, W = "Regular", TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+    fillAvatar(avWrap, 15, 4)
+    new("Frame", { Parent = avWrap, AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1.05, 1.05), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = Theme.Good, ZIndex = 6 }, { corner("full"), new("UIStroke", { Thickness = 2, Color = Theme.Card }) })
+    new("TextLabel", { Parent = card, Position = UDim2.fromOffset(51, 9), Size = UDim2.new(1, -80, 0, 17), Text = LocalPlayer.DisplayName, TextSize = 14, W = "SemiBold", TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+    new("TextLabel", { Parent = card, Position = UDim2.fromOffset(51, 27), Size = UDim2.new(1, -80, 0, 14), Text = "@" .. LocalPlayer.Name, TextSize = 12, W = "Regular", TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+    local _, moreIc, moreIt = makeIcon(card, "ellipsis", 16, Theme.Dim, "...", UDim2.new(1, -12, 0.5, 0), Vector2.new(1, 0.5))
+    moreIc.ZIndex = 5
+    -- the whole card opens the profile
+    local cardBtn = new("TextButton", { Parent = card, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 6 })
+    cardBtn.MouseEnter:Connect(function() tween(card, { BackgroundColor3 = Theme.FieldHover }, 0.15) tintIcon(moreIc, moreIt, Theme.Text) end)
+    cardBtn.MouseLeave:Connect(function() tween(card, { BackgroundColor3 = Theme.Card }, 0.2) tintIcon(moreIc, moreIt, Theme.Dim) end)
+    cardBtn.MouseButton1Click:Connect(function() win:OpenProfile() end)
+    -- the card is the profile tab's "button": light it up while the profile is open
+    local cardStroke = card:FindFirstChildOfClass("UIStroke")
+    win._onTabChanged = function(tab)
+        local on = tab == win.ProfileTab
+        tween(cardStroke, { Color = on and Theme.Accent or WHITE, Transparency = on and 0.35 or 0.93 }, 0.25)
+    end
+    win._sessionStart = os.clock()
 
     ------------------------------------------------------------------
     -- Header
@@ -2029,15 +2280,14 @@ function Library:CreateWindow(cfg)
         end)
         return b
     end
-    local bellBtn = topBtn("bell", "bell", "!", 1)
-    win._badge = new("Frame", { Parent = bellBtn, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(22, 9), Size = UDim2.fromOffset(0, 0), BackgroundColor3 = Theme.Bad, ZIndex = 7 }, { corner("full"), new("UIStroke", { Thickness = 2, Color = Theme.Bg }) })
-    topBtn("key", "key-round", "K", 2)
-    topBtn("settings", "settings", "*", 3)
-    topBtn("user", "user", "U", 4)
-    new("Frame", { Parent = buttonsFrame, LayoutOrder = 5, Size = UDim2.fromOffset(9, 18), BackgroundTransparency = 1 }, {
+    -- only minimize + close by default; script buttons (bell, key, settings, user, ...) come from SetTopButton / cfg.TopButtons
+    win._topBtns, win._topOrder, win._makeTopBtn = {}, 0, topBtn
+    win._topDivider = new("Frame", { Parent = buttonsFrame, LayoutOrder = 90, Size = UDim2.fromOffset(9, 18), BackgroundTransparency = 1, Visible = false }, {
         new("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), Size = UDim2.new(0, 1, 1, 0), BackgroundColor3 = WHITE, BackgroundTransparency = 0.88 }),
     })
-    local closeBtn = topBtn("close", "x", "x", 6)
+    topBtn("minimize", "minus", "-", 98)
+    win._top.minimize = function() win:Minimize() end
+    local closeBtn = topBtn("close", "x", "x", 99)
     win._top.close = function() win:Toggle(false) end
     closeBtn.MouseEnter:Connect(function() tween(closeBtn, { BackgroundColor3 = Theme.Bad, BackgroundTransparency = 0.8 }, 0.15) end)
     closeBtn.MouseLeave:Connect(function() tween(closeBtn, { BackgroundColor3 = WHITE, BackgroundTransparency = 1 }, 0.2) end)
@@ -2058,6 +2308,13 @@ function Library:CreateWindow(cfg)
         BackgroundColor3 = Theme.Bg, BackgroundTransparency = 0, Text = "Ctrl F", TextSize = 11, W = "SemiBold", TextColor3 = Theme.Dim, ZIndex = 5,
     }, { corner(5), pad(6, 0, 6, 0), stroke(WHITE, 0.92) })
     win._searchInput = sInput
+    -- the search box sits just left of the buttons, however many the script added
+    local function placeSearch()
+        local w = buttonsFrame.AbsoluteSize.X / effScale()
+        searchBox.Position = UDim2.new(1, -(14 + w + 10), 0.5, 0)
+    end
+    buttonsFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(placeSearch)
+    placeSearch()
 
     ------------------------------------------------------------------
     -- Pages & popups
@@ -2150,6 +2407,7 @@ function Library:CreateWindow(cfg)
         if now - last >= 0.5 then
             fps = math.floor(frames / (now - last) + 0.5)
             frames, last = 0, now
+            win._fps = fps
             if wm.Visible then
                 local ping = 0
                 pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5) end)
@@ -2353,6 +2611,43 @@ function Library:CreateWindow(cfg)
         task.delay(0.42, function() splash:Destroy() end)
     end)
 
+    ------------------------------------------------------------------
+    -- Minimized pill
+    ------------------------------------------------------------------
+    local mini = new("CanvasGroup", {
+        Parent = Gui, Size = UDim2.fromOffset(0, 44), AutomaticSize = Enum.AutomaticSize.X, BackgroundColor3 = Theme.Side,
+        Visible = false, GroupTransparency = 1, Active = true,
+    }, { corner(12), stroke(WHITE, 0.88), pad(7, 0, 14, 0), hlist(10) })
+    win._mini, win._miniScale = mini, new("UIScale", { Parent = mini })
+    local miniLogo = new("Frame", { Parent = mini, LayoutOrder = 1, Size = UDim2.fromOffset(30, 30), BackgroundColor3 = WHITE }, { corner(8) })
+    trackGrad(new("UIGradient", { Parent = miniLogo, Rotation = 45 }))
+    local miniLetter = new("TextLabel", { Parent = miniLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 15 })
+    onAccent(function() miniLetter.TextColor3 = contrast(Theme.Accent) end)
+    new("TextLabel", { Parent = mini, LayoutOrder = 2, Size = UDim2.fromOffset(0, 44), AutomaticSize = Enum.AutomaticSize.X, Text = win.Title, W = "Bold", TextSize = 14 })
+    makeIcon(mini, "maximize-2", 14, Theme.Sub, "+").LayoutOrder = 3
+    do
+        local dragging, moved, sp, st
+        connect(mini.InputBegan, function(i) if isPress(i) then dragging, moved, sp, st = true, false, ptr(i), mini.Position end end)
+        connect(UIS.InputChanged, function(i)
+            if dragging and isMove(i) then
+                local d = ptr(i) - sp
+                if d.Magnitude > 6 then moved = true end
+                if moved then mini.Position = UDim2.new(st.X.Scale, st.X.Offset + d.X, st.Y.Scale, st.Y.Offset + d.Y) end
+            end
+        end)
+        connect(UIS.InputEnded, function(i)
+            if dragging and isPress(i) then
+                dragging = false
+                if not moved then win:Toggle(true) end
+            end
+        end)
+    end
+
+    for _, name in ipairs(cfg.TopButtons or {}) do win:SetTopButton(name) end
+    win:_BuildProfileTab()
+    -- start on the profile (scripts' first tab no longer auto-selects); cfg.OpenProfile = false keeps the old behaviour
+    if cfg.OpenProfile ~= false then win:SelectTab(win.ProfileTab) end
+
     win.Open = false
     win:Toggle(true)
     return win
@@ -2369,11 +2664,54 @@ function Window:_DefaultTop(key, btn)
     elseif key == "settings" then
         if self.SettingsTab then self:SelectTab(self.SettingsTab) else self:Notify({ Text = "Call Window:AddSettingsTab() first", Type = "warning" }) end
     elseif key == "user" then
-        self:Notify({ Title = LocalPlayer.DisplayName, Text = "@" .. LocalPlayer.Name .. "  ·  ID " .. LocalPlayer.UserId, Type = "info", Sound = false })
+        self:OpenProfile()
     end
 end
 
-function Window:SetTopButton(name, cb) self._top[tostring(name):lower()] = cb end
+local TOP_ICONS = { bell = { "bell", "!" }, key = { "key-round", "K" }, settings = { "settings", "*" }, user = { "user", "U" } }
+
+-- adds a top-bar button (or rebinds an existing one). Without a callback the built-in action runs:
+-- bell = notification history, key = Configs tab, settings = Settings tab, user = profile
+function Window:SetTopButton(name, cb, icon)
+    name = tostring(name):lower()
+    self._top[name] = cb
+    if self._topBtns[name] or name == "minimize" or name == "close" then return end
+    local spec = TOP_ICONS[name]
+    self._topOrder += 1
+    local b = self._makeTopBtn(name, icon or (spec and spec[1]) or name, spec and spec[2] or name:sub(1, 1):upper(), self._topOrder)
+    self._topBtns[name] = b
+    if name == "bell" then
+        self._badge = new("Frame", { Parent = b, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(22, 9), Size = UDim2.fromOffset(0, 0), BackgroundColor3 = Theme.Bad, ZIndex = 7 }, { corner("full"), new("UIStroke", { Thickness = 2, Color = Theme.Bg }) })
+        if self._unread > 0 then self._badge.Size = UDim2.fromOffset(8, 8) end
+    end
+    self._topDivider.Visible = true
+end
+
+function Window:RemoveTopButton(name)
+    name = tostring(name):lower()
+    local b = self._topBtns[name]
+    if not b then return end
+    b:Destroy()
+    self._topBtns[name], self._top[name] = nil, nil
+    if name == "bell" then self._badge = nil end
+    self._topDivider.Visible = next(self._topBtns) ~= nil
+end
+
+-- hides the window into a small draggable pill; clicking it (or the toggle key) brings the window back
+function Window:Minimize()
+    if not self.Open then return end
+    local mini = self._mini
+    local ap = self.Root.AbsolutePosition
+    mini.Position = UDim2.fromOffset(ap.X, ap.Y)
+    self:Toggle(false)
+    self._minimized = true
+    mini.Visible = true
+    mini.GroupTransparency = 1
+    self._miniScale.Scale = 0.9
+    tween(mini, { GroupTransparency = 0 }, 0.25)
+    tween(self._miniScale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back)
+end
+
 function Window:IsOpen() return self.Open end
 
 function Window:Toggle(state)
@@ -2385,6 +2723,12 @@ function Window:Toggle(state)
     if self._hideSearch then self._hideSearch() end
     if Library._tipTarget then Library._tipTarget = nil self:_HideTip() end
     if state then
+        if self._minimized then
+            self._minimized = false
+            local mini = self._mini
+            tween(mini, { GroupTransparency = 1 }, 0.15)
+            task.delay(0.16, function() if not self._minimized then mini.Visible = false end end)
+        end
         self.Root.Visible = true
         tween(self.AnimScale, { Scale = 1 }, 0.45, Enum.EasingStyle.Back)
         tween(self.Canvas, { GroupTransparency = 0 }, 0.3)
@@ -2537,7 +2881,7 @@ end
 function Window:_OpenHistory(anchor)
     if self._popup and self._popup.Anchor == anchor then self:_ClosePopup() return end
     self._unread = 0
-    tween(self._badge, { Size = UDim2.fromOffset(0, 0) }, 0.2)
+    if self._badge then tween(self._badge, { Size = UDim2.fromOffset(0, 0) }, 0.2) end
     local hist = Library._History
     local n = math.min(#hist, 6)
     local H = 44 + math.max(n, 1) * 48 + 6
@@ -2559,6 +2903,164 @@ function Window:_OpenHistory(anchor)
             new("TextLabel", { Parent = r, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -10, 0, 6), Size = UDim2.fromOffset(50, 18), Text = os.date("%H:%M", e.Time), W = "Regular", TextSize = 11, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Right })
         end
     end)
+end
+
+-- Profile page (hidden tab, opened from the user card). Left: the 3D character. Right: universal
+-- Account / Session info. Scripts add their own sections through Window:GetProfileTab().
+function Window:_BuildProfileTab()
+    local win = self
+    local tab = self:CreateTab({ Name = "Profile", Icon = "user", Hidden = true })
+    self.ProfileTab = tab
+
+    local charSec = tab:Column("left"):CreateSection({ Name = "Character", Icon = "user-round", Collapsible = false })
+    local preview = charSec:AddCharacterPreview({ Name = "Profile Preview", Height = 330 })
+    charSec:AddButton({ Name = "Refresh Model", Icon = "refresh-cw", NoFastMenu = true, Callback = function() preview.Refresh() end })
+
+    -- Backpack: every Tool in the player's Backpack plus the one in hand, same names grouped with a count
+    local bag = tab:Column("left"):CreateSection({ Name = "Backpack", Icon = "backpack", Collapsible = false })
+    local bagCount = bag:AddLabel("Loading...")
+    local bagList = new("Frame", { Parent = bag.Content, LayoutOrder = nextOrder(bag), Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { vlist(4), pad(4, 0, 4, 4) })
+    local pending = false
+    local function renderBag()
+        pending = false
+        for _, c in ipairs(bagList:GetChildren()) do if c:IsA("GuiObject") then c:Destroy() end end
+        local items, order = {}, {}
+        local function add(tool, equipped)
+            local e = items[tool.Name]
+            if not e then
+                e = { Name = tool.Name, Count = 0, Equipped = false, Texture = tool.TextureId }
+                items[tool.Name] = e
+                table.insert(order, e)
+            end
+            e.Count += 1
+            e.Equipped = e.Equipped or equipped
+        end
+        local char = LocalPlayer.Character
+        if char then for _, t in ipairs(char:GetChildren()) do if t:IsA("Tool") then add(t, true) end end end
+        local pack = LocalPlayer:FindFirstChildOfClass("Backpack")
+        if pack then for _, t in ipairs(pack:GetChildren()) do if t:IsA("Tool") then add(t, false) end end end
+        table.sort(order, function(a, b)
+            if a.Equipped ~= b.Equipped then return a.Equipped end
+            return a.Name:lower() < b.Name:lower()
+        end)
+        local total = 0
+        for i, e in ipairs(order) do
+            total += e.Count
+            local row = new("Frame", { Parent = bagList, LayoutOrder = i, Size = UDim2.new(1, 0, 0, 36), BackgroundColor3 = Theme.Field }, { corner(8) })
+            if e.Equipped then
+                local st = stroke(Theme.Accent, 0.45)
+                st.Parent = row
+            end
+            local iconBox = new("Frame", { Parent = row, Position = UDim2.fromOffset(6, 6), Size = UDim2.fromOffset(24, 24), BackgroundColor3 = Theme.Bg }, { corner(6) })
+            if e.Texture and e.Texture ~= "" then
+                new("ImageLabel", { Parent = iconBox, Size = UDim2.fromScale(1, 1), Image = e.Texture }, { corner(6) })
+            else
+                makeIcon(iconBox, "box", 13, Theme.Dim, "#")
+            end
+            new("TextLabel", { Parent = row, Position = UDim2.fromOffset(38, 0), Size = UDim2.new(1, -130, 1, 0), Text = e.Name, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+            local right = new("Frame", { Parent = row, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1 },
+                { hlist(6, Enum.HorizontalAlignment.Right) })
+            if e.Equipped then
+                local tag = new("TextLabel", { Parent = right, LayoutOrder = 1, Size = UDim2.fromOffset(0, 18), AutomaticSize = Enum.AutomaticSize.X, Text = "IN HAND", W = "SemiBold", TextSize = 10, BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.82 }, { corner(5), pad(6, 0, 6, 0) })
+                tag.TextColor3 = Theme.Accent
+            end
+            if e.Count > 1 then
+                new("TextLabel", { Parent = right, LayoutOrder = 2, Size = UDim2.fromOffset(0, 18), AutomaticSize = Enum.AutomaticSize.X, Text = "x" .. e.Count, W = "SemiBold", TextSize = 12, TextColor3 = Theme.Sub })
+            end
+        end
+        if total == 0 then
+            new("TextLabel", { Parent = bagList, Size = UDim2.new(1, 0, 0, 30), Text = "Backpack is empty", TextColor3 = Theme.Dim, TextSize = 13 })
+        end
+        bagCount.Set(("<b>%d</b> item%s, <b>%d</b> kind%s"):format(total, total == 1 and "" or "s", #order, #order == 1 and "" or "s"))
+    end
+    -- batch bursts of changes (respawn refills the whole backpack at once) into one redraw
+    local function queueBag()
+        if pending then return end
+        pending = true
+        task.defer(renderBag)
+    end
+    local watched = {}
+    local function watch(container)
+        if not container or watched[container] then return end
+        watched[container] = true
+        connect(container.ChildAdded, function(c) if c:IsA("Tool") then queueBag() end end)
+        connect(container.ChildRemoved, function(c) if c:IsA("Tool") then queueBag() end end)
+    end
+    watch(LocalPlayer:FindFirstChildOfClass("Backpack"))
+    watch(LocalPlayer.Character)
+    connect(LocalPlayer.ChildAdded, function(c) if c:IsA("Backpack") then watch(c) queueBag() end end)
+    connect(LocalPlayer.CharacterAdded, function(c) watch(c) queueBag() end)
+    renderBag()
+
+    -- identity block: avatar, display name, @username, badges
+    local acc = tab:Column("right"):CreateSection({ Name = "Account", Icon = "fingerprint", Collapsible = false })
+    local id = new("Frame", { Parent = acc.Content, LayoutOrder = nextOrder(acc), Size = UDim2.new(1, 0, 0, 74), BackgroundTransparency = 1 })
+    local av = new("Frame", { Parent = id, Position = UDim2.fromOffset(8, 10), Size = UDim2.fromOffset(54, 54), BackgroundColor3 = Theme.Field }, { corner("full") })
+    local avStroke = new("UIStroke", { Parent = av, Thickness = 2, Color = Theme.Accent })
+    trackAccent(avStroke, "Color")
+    local avGlow = glow(av, Theme.Accent, 30, 0.75, 0)
+    trackAccent(avGlow, "ImageColor3")
+    fillAvatar(av, 22, 1)
+    new("TextLabel", { Parent = id, Position = UDim2.fromOffset(76, 12), Size = UDim2.new(1, -84, 0, 24), Text = LocalPlayer.DisplayName, W = "Bold", TextSize = 21, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+    new("TextLabel", { Parent = id, Position = UDim2.fromOffset(76, 36), Size = UDim2.new(1, -84, 0, 16), Text = "@" .. LocalPlayer.Name, W = "Regular", TextSize = 13, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+    local badges = new("Frame", { Parent = id, Position = UDim2.fromOffset(76, 55), Size = UDim2.new(1, -84, 0, 18), BackgroundTransparency = 1 }, { hlist(5) })
+    local function badge(text, color, order)
+        local b = new("TextLabel", {
+            Parent = badges, LayoutOrder = order, Size = UDim2.fromOffset(0, 18), AutomaticSize = Enum.AutomaticSize.X, Text = text,
+            W = "SemiBold", TextSize = 10, TextColor3 = color, BackgroundColor3 = color, BackgroundTransparency = 0.85,
+        }, { corner(5), pad(7, 0, 7, 0) })
+        return b
+    end
+    local ageDays = LocalPlayer.AccountAge
+    if LocalPlayer.MembershipType == Enum.MembershipType.Premium then badge("PREMIUM", Theme.Warn, 1) end
+    if LocalPlayer.HasVerifiedBadge then badge("VERIFIED", Theme.Info, 2) end
+    local accentBadge = badge(ageDays >= 365 and ((ageDays // 365) .. "Y ACCOUNT") or "NEW ACCOUNT", Theme.Accent, 3)
+    onAccent(function() accentBadge.TextColor3 = Theme.Accent accentBadge.BackgroundColor3 = Theme.Accent end)
+
+    local years, months = ageDays // 365, (ageDays % 365) // 30
+    acc:AddStat({ Name = "User ID", Value = LocalPlayer.UserId, Copy = true })
+    acc:AddStat({ Name = "Account Age", Value = (years > 0 and (years .. "y ") or "") .. months .. "mo  <font color=\"#" .. Theme.Dim:ToHex() .. "\">(" .. ageDays .. " days)</font>" })
+    acc:AddStat({ Name = "Joined Roblox", Value = os.date("%d %b %Y", os.time() - ageDays * 86400) })
+    acc:AddStat({ Name = "Profile Link", Value = "roblox.com/users/" .. LocalPlayer.UserId, Copy = true })
+
+    local function clock(sec)
+        sec = math.floor(sec)
+        return ("%d:%02d:%02d"):format(sec // 3600, sec % 3600 // 60, sec % 60)
+    end
+    local sess = tab:Column("right"):CreateSection({ Name = "Session", Icon = "activity", Collapsible = false })
+    local gameStat = sess:AddStat({ Name = "Game", Value = "..." })
+    task.spawn(function()
+        local ok, info = pcall(function() return S("MarketplaceService"):GetProductInfo(game.PlaceId) end)
+        gameStat.Set(ok and info and info.Name or tostring(game.PlaceId))
+    end)
+    sess:AddStat({ Name = "Players", Get = function() return #Players:GetPlayers() .. " / " .. Players.MaxPlayers end })
+    sess:AddStat({ Name = "Ping", Interval = 0.5, Get = function()
+        local ping = 0
+        pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue() + 0.5) end)
+        return ping .. " ms"
+    end })
+    sess:AddStat({ Name = "FPS", Interval = 0.5, Get = function() return win._fps or "-" end })
+    sess:AddStat({ Name = "Session Time", Get = function() return clock(os.clock() - (win._sessionStart or os.clock())) end })
+    sess:AddStat({ Name = "Server Uptime", Get = function() return clock(workspace.DistributedGameTime) end })
+    local okExec, exec = pcall(function() return identifyexecutor and identifyexecutor() end)
+    sess:AddStat({ Name = "Executor", Value = (okExec and exec) or "Unknown" })
+    sess:AddButton({ Name = "Copy Join Script", Icon = "link", NoFastMenu = true, Tooltip = "A one-line script that joins this exact server", Callback = function()
+        local line = ('game:GetService("TeleportService"):TeleportToPlaceInstance(%d, "%s")'):format(game.PlaceId, game.JobId)
+        local sc = setclipboard or toclipboard
+        if sc then pcall(sc, line) end
+        win:Notify({ Title = "Session", Text = "Join script copied", Type = "success", Sound = false, Duration = 2 })
+    end })
+
+    -- sections a script adds later go left/right alternately, not into the last column used here
+    tab._col = nil
+    return tab
+end
+
+-- the profile tab, for scripts to add their own sections: Window:GetProfileTab():Column("right"):CreateSection{...}
+function Window:GetProfileTab() return self.ProfileTab end
+
+function Window:OpenProfile()
+    if self.ProfileTab then self:SelectTab(self.ProfileTab) end
 end
 
 -- Notifications
@@ -2640,8 +3142,9 @@ end
 
 function Window:CreateTab(cfg)
     cfg = cfg or {}
-    local tab = setmetatable({ Window = self, Name = cfg.Name or "Tab", Icon = cfg.Icon, Sections = {} }, Tab)
-    local btn = new("TextButton", { Parent = self.TabList, LayoutOrder = #self.Tabs * 2 + 2, Size = UDim2.new(1, 0, 0, 38), BackgroundColor3 = WHITE, BackgroundTransparency = 1, Text = "", ZIndex = 4 }, { corner(9) })
+    -- Hidden = true: a page with no sidebar button (opened from code, e.g. the profile)
+    local tab = setmetatable({ Window = self, Name = cfg.Name or "Tab", Icon = cfg.Icon, Sections = {}, Hidden = cfg.Hidden }, Tab)
+    local btn = new("TextButton", { Parent = self.TabList, LayoutOrder = #self.Tabs * 2 + 2, Size = UDim2.new(1, 0, 0, 38), BackgroundColor3 = WHITE, BackgroundTransparency = 1, Text = "", ZIndex = 4, Visible = not cfg.Hidden }, { corner(9) })
     local xo = 14
     local iconObj, iconText
     if cfg.Icon then
@@ -2678,13 +3181,17 @@ function Window:CreateTab(cfg)
     btn.MouseButton1Click:Connect(function() self:SelectTab(tab) end)
 
     table.insert(self.Tabs, tab)
-    if not self.CurrentTab then task.defer(function() if not self.CurrentTab then self:SelectTab(tab) end end) end
+    if not self.CurrentTab and not cfg.Hidden then task.defer(function() if not self.CurrentTab then self:SelectTab(tab) end end) end
     return tab
 end
 
 function Window:_MovePill(animate)
     local tab = self.CurrentTab
     if not tab then return end
+    if tab.Hidden then
+        self._pill.Visible = false
+        return
+    end
     local s = effScale()
     local y = (tab.Button.AbsolutePosition.Y - self.TabList.AbsolutePosition.Y) / s
     local goal = UDim2.fromOffset(10, y)
@@ -2709,6 +3216,7 @@ function Window:SelectTab(tab)
     self.CurrentTab = tab
     tab._setSelected(true)
     self:_MovePill(true)
+    if self._onTabChanged then self._onTabChanged(tab) end
     local holder = tab.Page
     holder.Position = UDim2.fromOffset(0, 14)
     holder.GroupTransparency = 1
