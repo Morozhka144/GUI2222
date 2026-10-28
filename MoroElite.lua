@@ -35,13 +35,25 @@ local Library = {
         Soft = "soft.mp3", Payment = "payment.mp3", Tuntun = "tuntun.mp3", Voiced = "voiced.mp3", Litvin = "Litvin.mp3",
         Vibe = "vibe.mp3", Loader = "Loader.mp3", Warn = "Warn.mp3", Error = "Error.mp3",
     },
-    -- character art slots: upload artN.png to the repo's Art/ folder (or drop it into MoroLumina/Art) and it replaces the placeholder
+    -- character art: PNGs in the repo's Art/ folder, downloaded once into MoroLumina/Art (like the sounds).
+    -- All are trimmed to the figure and 1000 px tall, so they show at about the same scale; Ratio = width / height.
     ArtBaseUrl = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Art/",
     Art = {
-        { Name = "Art 1", Image = "art1.png" },
-        { Name = "Art 2", Image = "art2.png" },
-        { Name = "Art 3", Image = "art3.png" },
-        { Name = "Art 4", Image = "art4.png" },
+        { Name = "Alya", Image = "alya.png", Ratio = 0.565 },
+        { Name = "Alya (Hoodie)", Image = "alya_hoodie.png", Ratio = 0.495 },
+        { Name = "Alya (Cat)", Image = "alya_cat.png", Ratio = 0.563 },
+        { Name = "Reze", Image = "reze.png", Ratio = 0.486 },
+        { Name = "Reze (Peace)", Image = "reze_peace.png", Ratio = 0.38 },
+        { Name = "Reze (Gym)", Image = "reze_gym.png", Ratio = 0.405 },
+        { Name = "Makima", Image = "makima.png", Ratio = 0.493 },
+        { Name = "Marin", Image = "marin.png", Ratio = 0.486 },
+        { Name = "Tsunade", Image = "tsunade.png", Ratio = 0.586 },
+        { Name = "Hinata", Image = "hinata.png", Ratio = 0.561 },
+        { Name = "Kaguya", Image = "kaguya.png", Ratio = 0.53 },
+        { Name = "Sakura", Image = "sakura.png", Ratio = 0.651 },
+        { Name = "Frieren", Image = "frieren.png", Ratio = 0.407 },
+        { Name = "Neko", Image = "neko.png", Ratio = 0.5 },
+        { Name = "Kitty", Image = "kitty.png", Ratio = 0.484 },
     },
     LucideUrls = {
         "https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/lucide-roblox.luau",
@@ -627,6 +639,18 @@ function Library:ImportConfig(str)
     local ok, data = pcall(function() return HttpService:JSONDecode(b64dec(str)) end)
     if not ok or type(data) ~= "table" then return false, "Invalid config string" end
     return self:ApplyConfig(data)
+end
+
+-- menu preferences shared by all scripts (see Window:AddSettingsTab)
+function Library:LoadPrefs()
+    local raw = FS.read(self.Folder .. "/Settings.json")
+    if not raw then return {} end
+    local ok, t = pcall(HttpService.JSONDecode, HttpService, raw)
+    return (ok and type(t) == "table") and t or {}
+end
+function Library:SavePrefs(t)
+    FS.mkdirs(self.Folder)
+    return FS.write(self.Folder .. "/Settings.json", HttpService:JSONEncode(t))
 end
 
 function Library:OnUnload(fn) table.insert(self._OnUnload, fn) end
@@ -2336,13 +2360,11 @@ Effects.Bubbles = {
 Library.EffectNames = { "Off", "Sakura", "Snow", "Rain", "Stars", "Fireflies", "Embers", "Bubbles" }
 
 local function buildEffects(win)
-    local E = { Name = "Off", Density = 1, Fullscreen = false, parts = {} }
-    -- window layer: over the content (not Active, so clicks pass through), under popups; screen layer: behind the whole window
-    local winLayer = new("Frame", { Parent = win.Canvas, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 45 })
-    local screenLayer = new("Frame", { Parent = win.Gui, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, ZIndex = 0 })
-    local function layer() return E.Fullscreen and screenLayer or winLayer end
+    local E = { Name = "Off", Density = 1, parts = {} }
+    -- the whole screen, behind the window (and the art); shown while the menu is open
+    local layer = new("Frame", { Parent = win.Gui, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, ZIndex = 0 })
     local function dims()
-        local sz = layer().AbsoluteSize
+        local sz = layer.AbsoluteSize
         return math.max(sz.X, 50), math.max(sz.Y, 50)
     end
     local function rebuild()
@@ -2350,11 +2372,12 @@ local function buildEffects(win)
         table.clear(E.parts)
         local def = Effects[E.Name]
         if not def then return end
-        local L = layer()
         local W, H = dims()
-        for i = 1, math.max(2, math.floor(def.n * E.Density + 0.5)) do
+        -- counts are tuned for ~900x600: bigger screens get proportionally more, up to 3x
+        local k = math.clamp(W * H / (900 * 600), 1, 3)
+        for i = 1, math.max(2, math.floor(def.n * k * E.Density + 0.5)) do
             local p = { i = i }
-            p.obj = def.make(L, i)
+            p.obj = def.make(layer, i)
             def.spawn(p, W, H, true)
             table.insert(E.parts, p)
         end
@@ -2390,20 +2413,15 @@ local function buildEffects(win)
         E.Density = math.clamp(tonumber(d) or 1, 0.2, 3)
         queue()
     end
-    function E.SetFullscreen(b)
-        E.Fullscreen = b and true or false
-        screenLayer.Visible = E.Fullscreen and win.Open
-        rebuild()
-    end
     function E.OnToggle(open)
-        if open then screenLayer.Visible = E.Fullscreen
-        else task.delay(0.2, function() if not win.Open then screenLayer.Visible = false end end) end
+        if open then layer.Visible = true
+        else task.delay(0.2, function() if not win.Open then layer.Visible = false end end) end
     end
     return E
 end
 
 ----------------------------------------------------------------------
--- Character art: a PNG standing next to the window. Slots without a picture show a placeholder.
+-- Character art: a PNG in the bottom corner of the screen, behind the window. Slots without a picture show a placeholder.
 ----------------------------------------------------------------------
 local function isImage(body)
     return type(body) == "string" and #body > 200 and (body:sub(1, 4) == "\137PNG" or body:sub(1, 3) == "\255\216\255")
@@ -2463,18 +2481,23 @@ local function artPlaceholder(parent, name)
     return f
 end
 
+local ART_MARGIN = 16 -- gap between the art and the side of the screen (the figures are cut at the bottom, so they sit on the edge)
+
 local function buildArt(win, cfg)
-    local A = { List = {}, Name = "Off", Side = "Right", Front = false, Size = 1.1, Opacity = 1 }
+    local A = { List = {}, Name = "Off", Side = "Right", Size = 0.6, Opacity = 1 } -- Size: share of the screen height
     if cfg.Art ~= false then A.List = type(cfg.Art) == "table" and cfg.Art or Library.Art end
     local ratio = new("UIAspectRatioConstraint", { AspectRatio = 0.62, DominantAxis = Enum.DominantAxis.Height })
     local holder = new("CanvasGroup", {
-        Parent = win.Root, AnchorPoint = Vector2.new(0.3, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromScale(5, A.Size), -- the aspect constraint shrinks the width
+        Parent = win.Gui, AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromScale(5, A.Size), -- the aspect constraint shrinks the width
         BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = 1,
     }, { ratio })
     local stage = new("Frame", { Parent = holder, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 })
     A.Holder = holder
 
-    local function home() return UDim2.fromScale(A.Side == "Left" and 0 or 1, 1) end
+    local function home()
+        local left = A.Side == "Left"
+        return UDim2.new(left and 0 or 1, left and ART_MARGIN or -ART_MARGIN, 1, 0)
+    end
     local token = 0
     local function render()
         token += 1
@@ -2495,11 +2518,7 @@ local function buildArt(win, cfg)
         end)
     end
     function A.Place()
-        -- behind the window: 30% tucked under its edge; in front: overlapping the corner a bit more
-        local right = A.Side ~= "Left"
-        local k = A.Front and 0.42 or 0.3
-        holder.ZIndex = A.Front and 3 or 1
-        holder.AnchorPoint = Vector2.new(right and k or 1 - k, 1)
+        holder.AnchorPoint = Vector2.new(A.Side == "Left" and 0 or 1, 1)
         holder.Position = home()
         holder.Size = UDim2.fromScale(5, A.Size)
         if win.Open and A.Current then tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.25) end
@@ -2522,8 +2541,8 @@ local function buildArt(win, cfg)
     function A.OnToggle(open)
         if not A.Current then return end
         if open then
-            -- slides in from outside the window a moment after it opens
-            holder.Position = home() + UDim2.fromOffset(A.Side == "Left" and -30 or 30, 0)
+            -- rises from the bottom edge a moment after the window opens
+            holder.Position = home() + UDim2.fromOffset(A.Side == "Left" and -20 or 20, 40)
             holder.GroupTransparency = 1
             task.delay(0.1, function()
                 if win.Open then tween(holder, { GroupTransparency = 1 - A.Opacity, Position = home() }, 0.55, Enum.EasingStyle.Quint) end
@@ -2532,13 +2551,6 @@ local function buildArt(win, cfg)
             tween(holder, { GroupTransparency = 1 }, 0.18)
         end
     end
-    -- idle float
-    local t = 0
-    connect(RunService.RenderStepped, function(dt)
-        if not (win.Open and holder.Visible) then return end
-        t += dt
-        stage.Position = UDim2.fromOffset(0, -(0.5 + 0.5 * math.sin(t * 1.3)) * 6)
-    end)
     return A
 end
 
@@ -2577,7 +2589,10 @@ function Library:CreateWindow(cfg)
     win.TeleportUrl = cfg.TeleportUrl
     win.TeleportScript = cfg.TeleportScript
     win.NotifySound = cfg.NotifySound ~= false
+    -- the shared menu preferences that matter before the Settings tab exists
+    local prefs = Library:LoadPrefs()
     win.LoaderSound = cfg.LoaderSound ~= false
+    if type(prefs["Startup Sound (Loader)"]) == "boolean" then win.LoaderSound = prefs["Startup Sound (Loader)"] end
     win.NotifySoundName = cfg.NotifySoundName or "Soft"
     win.NotifySoundVolume = cfg.NotifySoundVolume or 0.5
     win.BlurEnabled = cfg.Blur ~= false
@@ -2596,7 +2611,7 @@ function Library:CreateWindow(cfg)
     win.Blur = new("BlurEffect", { Name = "MoroEliteBlur", Size = 0, Parent = Lighting })
 
     local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-    local Root = new("Frame", { Name = "Root", Parent = Gui, BackgroundTransparency = 1, Visible = false, Size = UDim2.fromOffset(DEF_W, DEF_H), Position = UDim2.fromOffset(vp.X / 2 - DEF_W / 2, vp.Y / 2 - DEF_H / 2) })
+    local Root = new("Frame", { Name = "Root", Parent = Gui, BackgroundTransparency = 1, Visible = false, ZIndex = 2, Size = UDim2.fromOffset(DEF_W, DEF_H), Position = UDim2.fromOffset(vp.X / 2 - DEF_W / 2, vp.Y / 2 - DEF_H / 2) })
     win.Root = Root
     win.RootScale = new("UIScale", { Parent = Root })
     local Shadow = shadow(Root, 160, 1)
@@ -3119,8 +3134,8 @@ function Library:CreateWindow(cfg)
     -- once the splash is gone, show for 2 s where the menu can be reopened from
     if cfg.OpenGuide ~= false then task.delay(1.7, function() if Library.Window == win then win:ShowOpenGuide(2) end end) end
 
-    win.Effects.Set(cfg.Effect or "Sakura")
-    win.Art.Set(cfg.ArtDefault or (cfg.Art == false and "Off") or "Art 1")
+    win.Effects.Set(prefs["Background Effect"] or cfg.Effect or "Sakura")
+    win.Art.Set(prefs["Character Art"] or cfg.ArtDefault or (cfg.Art == false and "Off") or "Random")
 
     win.Open = false
     win:Toggle(true)
@@ -3301,14 +3316,12 @@ end
 function Window:SetEffect(name) self.Effects.Set(name) end
 function Window:GetEffect() return self.Effects.Name end
 function Window:SetEffectDensity(d) self.Effects.SetDensity(d) end
-function Window:SetEffectFullscreen(b) self.Effects.SetFullscreen(b) end
 
--- character art next to the window: "Off", "Random" or a slot name from Library.Art / cfg.Art
+-- character art in the bottom corner of the screen: "Off", "Random" or a slot name from Library.Art / cfg.Art
 function Window:SetArt(name) self.Art.Set(name) end
 function Window:GetArt() return self.Art.Name end
 function Window:SetArtSide(side) self.Art.Side = side == "Left" and "Left" or "Right" self.Art.Place() end
-function Window:SetArtFront(b) self.Art.Front = b and true or false self.Art.Place() end
-function Window:SetArtSize(k) self.Art.Size = math.clamp(tonumber(k) or 1.1, 0.4, 2) self.Art.Place() end
+function Window:SetArtSize(k) self.Art.Size = math.clamp(tonumber(k) or 0.6, 0.2, 1) self.Art.Place() end
 function Window:SetArtOpacity(k) self.Art.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.Art.Place() end
 
 function Window:SetBlur(b)
@@ -3934,19 +3947,47 @@ function Window:AddSettingsTab()
     local L, R = tab:Column("left"), tab:Column("right")
     local ui = self._ui
 
+    -- menu preferences are shared by every script that uses MoroElite on this executor: saved on each change
+    -- to <Folder>/Settings.json and kept out of per-game configs. Fast Menu, Keybind List and Teleport stay per script.
+    local stored = Library:LoadPrefs()
+    local prefEls, prefsReady, saveQueued = {}, false, false
+    self.Prefs = prefEls -- name -> element, e.g. win.Prefs["Background Effect"].Set("Snow")
+    local function savePrefs()
+        if not prefsReady or saveQueued then return end
+        saveQueued = true
+        task.delay(0.4, function()
+            saveQueued = false
+            for name, el in pairs(prefEls) do
+                local ok, v = pcall(el.Get)
+                if ok and v ~= nil then stored[name] = encode(v) end
+            end
+            Library:SavePrefs(stored)
+        end)
+    end
+    local function pref(sec, method, cfg)
+        cfg.NoConfig = true
+        local cb, ccb = cfg.Callback, cfg.ChangedCallback
+        cfg.Callback = function(...) call(cb, ...) savePrefs() end
+        if method == "AddKeybind" then cfg.ChangedCallback = function(...) call(ccb, ...) savePrefs() end end
+        local el = sec[method](sec, cfg)
+        prefEls[cfg.Name] = el
+        if stored[cfg.Name] ~= nil then pcall(el.Set, decode(stored[cfg.Name])) end
+        return el
+    end
+
     -- Interface
     local iface = L:CreateSection({ Name = "Interface", Icon = "palette" })
-    iface:AddDropdown({ Name = "UI Scale", Options = { "50%", "75%", "100%", "125%", "150%" }, Default = "100%", Callback = function(v)
+    pref(iface, "AddDropdown", { Name = "UI Scale", Options = { "50%", "75%", "100%", "125%", "150%" }, Default = "100%", Callback = function(v)
         win:_SetUIScale((tonumber((tostring(v):gsub("%%", ""))) or 100) / 100)
     end })
-    ui.MenuBind = iface:AddKeybind({ Name = "Menu Toggle", Default = self.ToggleKey, NoBind = true, ChangedCallback = function(k)
+    ui.MenuBind = pref(iface, "AddKeybind", { Name = "Menu Toggle", Default = self.ToggleKey, NoBind = true, ChangedCallback = function(k)
         if k then win.ToggleKey = k end
     end })
     local accNames = {}
     for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
     local rainbow = false
     local customPicker
-    iface:AddDropdown({ Name = "Accent Color", Options = accNames, Default = "Purple", Callback = function(v)
+    pref(iface, "AddDropdown", { Name = "Accent Color", Options = accNames, Default = "Purple", Callback = function(v)
         for _, a in ipairs(Library.Accents) do
             if a[1] == v then
                 Library:SetAccent(a[2])
@@ -3954,8 +3995,8 @@ function Window:AddSettingsTab()
             end
         end
     end })
-    customPicker = iface:AddColorPicker({ Name = "Custom Accent", Default = Theme.Accent, Callback = function(c) if not rainbow then Library:SetAccent(c) end end })
-    iface:AddToggle({ Name = "Rainbow Accent", NoFastMenu = true, Tooltip = "Cycles the accent color through the rainbow", Callback = function(v) rainbow = v end })
+    customPicker = pref(iface, "AddColorPicker", { Name = "Custom Accent", Default = Theme.Accent, Callback = function(c) if not rainbow then Library:SetAccent(c) end end })
+    pref(iface, "AddToggle", { Name = "Rainbow Accent", NoFastMenu = true, Tooltip = "Cycles the accent color through the rainbow", Callback = function(v) rainbow = v end })
     do
         local t = 0
         local acc = 0
@@ -3970,9 +4011,9 @@ function Window:AddSettingsTab()
             end
         end)
     end
-    iface:AddToggle({ Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
-    iface:AddToggle({ Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
-    iface:AddDropdown({ Name = "Open Control", Options = { "Bar", "Button", "Off" }, Default = win.OpenControl, Tooltip = "How to open the menu without a keyboard", Callback = function(v)
+    pref(iface, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
+    pref(iface, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
+    pref(iface, "AddDropdown", { Name = "Open Control", Options = { "Bar", "Button", "Off" }, Default = win.OpenControl, Tooltip = "How to open the menu without a keyboard", Callback = function(v)
         if v == win.OpenControl then return end
         win:SetOpenControl(v)
         win:ShowOpenGuide(2)
@@ -3981,15 +4022,13 @@ function Window:AddSettingsTab()
 
     -- Atmosphere: background particles and the character art
     local atm = L:CreateSection({ Name = "Atmosphere", Icon = "sparkles", Collapsible = true })
-    atm:AddDropdown({ Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
-    atm:AddSlider({ Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
-    atm:AddToggle({ Name = "Full Screen Effect", NoFastMenu = true, Tooltip = "Particles fill the screen behind the menu, not only the window", Callback = function(v) win:SetEffectFullscreen(v) end })
+    pref(atm, "AddDropdown", { Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
+    pref(atm, "AddSlider", { Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
     if #win.Art.List > 0 then
-        atm:AddDropdown({ Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
-        atm:AddDropdown({ Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
-        atm:AddToggle({ Name = "Art In Front", NoFastMenu = true, Tooltip = "Draw the art over the window edge instead of behind it", Callback = function(v) win:SetArtFront(v) end })
-        atm:AddSlider({ Name = "Art Size", Min = 50, Max = 160, Default = win.Art.Size * 100, Suffix = "%", Callback = function(v) win:SetArtSize(v / 100) end })
-        atm:AddSlider({ Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
+        pref(atm, "AddDropdown", { Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
+        pref(atm, "AddDropdown", { Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
+        pref(atm, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
+        pref(atm, "AddSlider", { Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
     end
 
     -- Fast Menu
@@ -4011,14 +4050,6 @@ function Window:AddSettingsTab()
     fsec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Fast Menu Lock", Callback = function(v) fm:SetLocked(v) end })
     fsec:AddButton({ Name = "Reset Position", NoFastMenu = true, Flag = "Fast Menu Reset", Callback = function() fm:SetPosition(UDim2.new(0, 20, 0.3, 0)) end })
 
-    -- Keybind List
-    local kl = self.KeybindList
-    local ksec = L:CreateSection({ Name = "Keybind List", Icon = "keyboard", Collapsible = true })
-    ksec:AddToggle({ Name = "Enable Keybind List", NoFastMenu = true, Callback = function(v) kl:SetVisible(v) end })
-    ksec:AddSlider({ Name = "HUD Scale", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) kl:SetScale(v / 100) end })
-    ksec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Keybind List Lock", Callback = function(v) kl:SetLocked(v) end })
-    ksec:AddButton({ Name = "Reset Position", NoFastMenu = true, Flag = "Keybind List Reset", Callback = function() kl:SetPosition(UDim2.new(1, -230, 0.3, 0)) end })
-
     -- Teleport
     local tsec = R:CreateSection({ Name = "Teleport", Icon = "plane" })
     ui.ExecuteOnTeleport = tsec:AddToggle({ Name = "Execute on Teleport", Default = self.ExecuteOnTeleport, NoFastMenu = true, Tooltip = "Re-runs the script after a server change", Callback = function(v) win:SetExecuteOnTeleport(v) end })
@@ -4027,8 +4058,8 @@ function Window:AddSettingsTab()
 
     -- Actions
     local asec = R:CreateSection({ Name = "Actions", Icon = "activity" })
-    asec:AddToggle({ Name = "Anti-AFK", Icon = "coffee", Default = true, NoFastMenu = true, Tooltip = "Prevents the 20-minute idle kick", Callback = function(v) Library:SetAntiAFK(v) end })
-    asec:AddToggle({ Name = "Anti-Lag", Icon = "gauge", NoFastMenu = true, Tooltip = "Low graphics, no shadows/particles/decals, also for newly spawned objects. Turning off keeps what was already simplified until rejoin", Callback = function(v) Library:SetAntiLag(v) end })
+    pref(asec, "AddToggle", { Name = "Anti-AFK", Icon = "coffee", Default = true, NoFastMenu = true, Tooltip = "Prevents the 20-minute idle kick", Callback = function(v) Library:SetAntiAFK(v) end })
+    pref(asec, "AddToggle", { Name = "Anti-Lag", Icon = "gauge", NoFastMenu = true, Tooltip = "Low graphics, no shadows/particles/decals, also for newly spawned objects. Turning off keeps what was already simplified until rejoin", Callback = function(v) Library:SetAntiLag(v) end })
     asec:AddButton({ Name = "Server Hop", Icon = "shuffle", Primary = true, NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Server Hop", Text = "Searching for a server...", Type = "info" })
         task.spawn(function() Library:ServerHop() end)
@@ -4041,15 +4072,15 @@ function Window:AddSettingsTab()
 
     -- Notifications
     local nsec = R:CreateSection({ Name = "Notifications", Icon = "bell" })
-    ui.NotifySound = nsec:AddToggle({ Name = "Notification Sound", Default = self.NotifySound, NoFastMenu = true, Callback = function(v) win:SetNotifySound(v) end })
-    ui.LoaderSound = nsec:AddToggle({ Name = "Startup Sound (Loader)", Default = self.LoaderSound, NoFastMenu = true, Callback = function(v) win:SetLoaderSound(v) end })
-    ui.NotifySoundName = nsec:AddDropdown({ Name = "Sound Type", Options = Library.SoundNames, Default = self.NotifySoundName, Callback = function(v)
+    ui.NotifySound = pref(nsec, "AddToggle", { Name = "Notification Sound", Default = self.NotifySound, NoFastMenu = true, Callback = function(v) win:SetNotifySound(v) end })
+    ui.LoaderSound = pref(nsec, "AddToggle", { Name = "Startup Sound (Loader)", Default = self.LoaderSound, NoFastMenu = true, Callback = function(v) win:SetLoaderSound(v) end })
+    ui.NotifySoundName = pref(nsec, "AddDropdown", { Name = "Sound Type", Options = Library.SoundNames, Default = self.NotifySoundName, Callback = function(v)
         if v then
             win:SetNotifySoundName(v)
             Library:PlaySound(v, win.NotifySoundVolume)
         end
     end })
-    ui.NotifySoundVolume = nsec:AddSlider({ Name = "Sound Volume", Min = 0, Max = 100, Default = self.NotifySoundVolume * 100, Suffix = "%", Callback = function(v) win:SetNotifySoundVolume(v) end })
+    ui.NotifySoundVolume = pref(nsec, "AddSlider", { Name = "Sound Volume", Min = 0, Max = 100, Default = self.NotifySoundVolume * 100, Suffix = "%", Callback = function(v) win:SetNotifySoundVolume(v) end })
     nsec:AddButton({ Name = "Test Notification", Icon = "bell-ring", NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Test", Text = "Sound: " .. win.NotifySoundName, Type = "success" })
     end })
@@ -4057,6 +4088,16 @@ function Window:AddSettingsTab()
         win:Notify({ Title = "Warning", Text = "This is a test warning", Type = "warning" })
         task.delay(0.7, function() win:Notify({ Title = "Error", Text = "This is a test error", Type = "error" }) end)
     end })
+
+    -- Keybind List
+    local kl = self.KeybindList
+    local ksec = R:CreateSection({ Name = "Keybind List", Icon = "keyboard", Collapsible = true })
+    ksec:AddToggle({ Name = "Enable Keybind List", NoFastMenu = true, Callback = function(v) kl:SetVisible(v) end })
+    ksec:AddSlider({ Name = "HUD Scale", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) kl:SetScale(v / 100) end })
+    ksec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Keybind List Lock", Callback = function(v) kl:SetLocked(v) end })
+    ksec:AddButton({ Name = "Reset Position", NoFastMenu = true, Flag = "Keybind List Reset", Callback = function() kl:SetPosition(UDim2.new(1, -230, 0.3, 0)) end })
+
+    prefsReady = true
 
     local cfgTab = self:AddConfigsTab()
     return tab, cfgTab
