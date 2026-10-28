@@ -93,6 +93,7 @@ local function initState()
     Library._Listening = nil
     Library._soundCache = {}
     Library._queued = false
+    Library._antiAfk, Library._antiLag = nil, nil
 end
 initState()
 
@@ -687,6 +688,65 @@ function Library:Rejoin()
     else
         TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
     end
+end
+
+-- Anti-AFK: answer Roblox's idle kick timer with a virtual right click
+function Library:SetAntiAFK(enabled)
+    if self._antiAfk then self._antiAfk:Disconnect() self._antiAfk = nil end
+    if not enabled then return end
+    self._antiAfk = connect(LocalPlayer.Idled, function()
+        pcall(function()
+            local vu = game:GetService("VirtualUser")
+            vu:Button2Down(Vector2.zero, workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.zero, workspace.CurrentCamera.CFrame)
+        end)
+    end)
+end
+
+-- Anti-Lag: strip heavy rendering from the world, and keep doing it for objects spawned later.
+-- Turning it off stops processing new objects; what was already simplified stays until rejoin.
+local function lightenObject(obj)
+    if obj:IsA("BasePart") then
+        obj.Material = Enum.Material.Plastic
+        obj.Reflectance = 0
+        obj.CastShadow = false
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        obj.Transparency = 1
+    elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
+        obj.Enabled = false
+    elseif obj:IsA("Explosion") then
+        obj.Visible = false
+    end
+end
+
+function Library:SetAntiLag(enabled)
+    if self._antiLag then self._antiLag:Disconnect() self._antiLag = nil end
+    if not enabled then return end
+    local ownBlur = self.Window and self.Window.Blur
+    pcall(function()
+        local terrain = workspace:FindFirstChildOfClass("Terrain")
+        if terrain then
+            terrain.WaterWaveSize, terrain.WaterWaveSpeed = 0, 0
+            terrain.WaterReflectance, terrain.WaterTransparency = 0, 0
+        end
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.Brightness = 1
+        for _, fx in ipairs(Lighting:GetChildren()) do
+            if fx:IsA("PostEffect") and fx ~= ownBlur then fx.Enabled = false end
+        end
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+    self._antiLag = connect(workspace.DescendantAdded, function(obj) pcall(lightenObject, obj) end)
+    -- existing objects in chunks so a big map does not freeze the client for a second
+    task.spawn(function()
+        for i, obj in ipairs(workspace:GetDescendants()) do
+            if not self._antiLag then return end
+            pcall(lightenObject, obj)
+            if i % 4000 == 0 then task.wait() end
+        end
+    end)
 end
 
 function Library:ServerHop()
@@ -2868,6 +2928,8 @@ function Window:AddSettingsTab()
 
     -- Actions
     local asec = R:CreateSection({ Name = "Actions", Icon = "activity" })
+    asec:AddToggle({ Name = "Anti-AFK", Icon = "coffee", Default = true, NoFastMenu = true, Tooltip = "Prevents the 20-minute idle kick", Callback = function(v) Library:SetAntiAFK(v) end })
+    asec:AddToggle({ Name = "Anti-Lag", Icon = "gauge", NoFastMenu = true, Tooltip = "Low graphics, no shadows/particles/decals, also for newly spawned objects. Turning off keeps what was already simplified until rejoin", Callback = function(v) Library:SetAntiLag(v) end })
     asec:AddButton({ Name = "Server Hop", Icon = "shuffle", Primary = true, NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Server Hop", Text = "Searching for a server...", Type = "info" })
         task.spawn(function() Library:ServerHop() end)
