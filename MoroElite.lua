@@ -1121,11 +1121,21 @@ local function mkRow(sec, h, name, desc)
     return row, lbl
 end
 
-local function rightBox(row, order)
-    return new("Frame", {
+-- right-aligned controls; when label is given, the label stretches up to the controls (re-fits when chips/swatches are added)
+local function rightBox(row, label, labelX)
+    local box = new("Frame", {
         Parent = row, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X,
         BackgroundTransparency = 1, ZIndex = 3,
     }, { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, HorizontalAlignment = Enum.HorizontalAlignment.Right, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }) })
+    if label then
+        local function fit()
+            local w = box.AbsoluteSize.X / effScale()
+            label.Size = UDim2.new(1, -(labelX or 10) - w - 18, 0, label.Size.Y.Offset)
+        end
+        box:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+        fit()
+    end
+    return box
 end
 
 local function attachTip(obj, text)
@@ -1354,10 +1364,9 @@ function Section:AddToggle(cfg)
         xo = 34
         label.Position = UDim2.new(0, xo, 0, label.Position.Y.Offset)
     end
-    label.Size = UDim2.new(1, -xo - 120, 0, label.Size.Y.Offset)
     label.TextColor3 = Theme.Sub
     local click = new("TextButton", { Parent = row, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Text = "", ZIndex = 1 })
-    local right = rightBox(row)
+    local right = rightBox(row, label, xo)
 
     local sw = new("Frame", { Parent = right, LayoutOrder = 10, Size = UDim2.fromOffset(40, 22), BackgroundTransparency = 1, ZIndex = 3 })
     local gl = glow(sw, Theme.Accent, 34, 1, 3)
@@ -1781,8 +1790,7 @@ function Section:AddKeybind(cfg)
     cfg = cfg or {}
     local name = cfg.Name or "Keybind"
     local row, label = mkRow(self, 36, name, cfg.Description)
-    label.Size = UDim2.new(1, -130, 0, label.Size.Y.Offset)
-    local right = rightBox(row)
+    local right = rightBox(row, label)
     local bind = createBind({
         Name = name, Key = cfg.Default, Mode = cfg.Mode, Parent = right, NoBind = cfg.NoBind, ZIndex = 4,
         OnActive = function(v) call(cfg.Callback, v) end,
@@ -1816,8 +1824,7 @@ function Section:AddColorPicker(cfg)
     local name = cfg.Name or "Color"
     local color = parseColor(cfg.Default) or WHITE
     local row, label = mkRow(self, 36, name, cfg.Description)
-    label.Size = UDim2.new(1, -80, 0, label.Size.Y.Offset)
-    local right = rightBox(row)
+    local right = rightBox(row, label)
     local hexLbl = new("TextLabel", { Parent = right, LayoutOrder = 1, Size = UDim2.fromOffset(0, 22), AutomaticSize = Enum.AutomaticSize.X, Text = "#" .. color:ToHex():upper(), TextSize = 12, TextColor3 = Theme.Dim, ZIndex = 4 })
     local swatch = new("TextButton", { Parent = right, LayoutOrder = 2, Size = UDim2.fromOffset(34, 20), BackgroundColor3 = color, Text = "", ZIndex = 4 }, { corner(6), stroke(WHITE, 0.8) })
     local function apply(c)
@@ -1844,11 +1851,14 @@ end
 ----------------------------------------------------------------------
 -- Tab
 ----------------------------------------------------------------------
+-- Column() returns the column and also makes it current, so Lumina-style
+-- `Tab:Column("left")` followed by `Tab:CreateSection(...)` keeps working
 function Tab:Column(side)
-    if side == "right" then return self.RightCol end
-    return self.LeftCol
+    self._col = (side == "right") and self.RightCol or self.LeftCol
+    return self._col
 end
 function Tab:CreateSection(cfg)
+    if self._col then return self._col:CreateSection(cfg) end
     self._alt = (self._alt or 0) + 1
     local col = (self._alt % 2 == 1) and self.LeftCol or self.RightCol
     return col:CreateSection(cfg)
