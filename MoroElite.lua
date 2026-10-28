@@ -2458,8 +2458,7 @@ function Library:CreateWindow(cfg)
 
     -- Mobile OPEN button
     local mob = new("TextButton", {
-        Parent = Gui, Position = UDim2.new(0.5, -40, 0, 70), Size = UDim2.fromOffset(80, 34), Text = "", BackgroundColor3 = WHITE,
-        Visible = (cfg.MobileButton == nil and UIS.TouchEnabled) or cfg.MobileButton == true,
+        Parent = Gui, Position = UDim2.new(0.5, -40, 0, 70), Size = UDim2.fromOffset(80, 34), Text = "", BackgroundColor3 = WHITE, Visible = false,
     }, { corner("full"), stroke(WHITE, 0.7) })
     trackGrad(new("UIGradient", { Parent = mob, Rotation = 20 }))
     local mobInner = new("Frame", { Parent = mob, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, { hlist(6, Enum.HorizontalAlignment.Center) })
@@ -2488,6 +2487,36 @@ function Library:CreateWindow(cfg)
             end
         end)
     end
+
+    -- Bottom bar: a thin pill at the bottom centre of the screen (like a phone's home indicator);
+    -- the default way to open the menu without a keyboard. Hit area is bigger than the line itself.
+    local bar = new("TextButton", {
+        Parent = Gui, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -4), Size = UDim2.fromOffset(220, 24),
+        BackgroundTransparency = 1, Text = "", Visible = false,
+    })
+    local barGlow = glow(bar, Theme.Accent, 30, 1)
+    trackAccent(barGlow, "ImageColor3")
+    local barLine = new("Frame", {
+        Parent = bar, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(140, 5),
+        BackgroundColor3 = WHITE, BackgroundTransparency = 0.35,
+    }, { corner("full") })
+    local barHover = false
+    local function barLook()
+        tween(barLine, {
+            Size = UDim2.fromOffset(barHover and 176 or 140, barHover and 6 or 5),
+            BackgroundColor3 = barHover and Theme.Accent or WHITE,
+            BackgroundTransparency = barHover and 0 or (win.Open and 0.6 or 0.35),
+        }, 0.25)
+        tween(barGlow, { ImageTransparency = barHover and 0.45 or 1 }, 0.25)
+    end
+    win._barLook = barLook
+    bar.MouseEnter:Connect(function() barHover = true barLook() end)
+    bar.MouseLeave:Connect(function() barHover = false barLook() end)
+    connect(bar.MouseButton1Click, function() win:Toggle() end)
+    win.OpenBar = bar
+
+    -- Bar (default) / Button / Off; cfg.MobileButton from older scripts still maps onto it
+    win:SetOpenControl(cfg.OpenControl or (cfg.MobileButton == true and "Button") or (cfg.MobileButton == false and "Off") or "Bar")
 
     ------------------------------------------------------------------
     -- Input
@@ -2686,6 +2715,8 @@ function Library:CreateWindow(cfg)
     win:_BuildProfileTab()
     -- start on the profile (scripts' first tab no longer auto-selects); cfg.OpenProfile = false keeps the old behaviour
     if cfg.OpenProfile ~= false then win:SelectTab(win.ProfileTab) end
+    -- once the splash is gone, show for 2 s where the menu can be reopened from
+    if cfg.OpenGuide ~= false then task.delay(1.7, function() if Library.Window == win then win:ShowOpenGuide(2) end end) end
 
     win.Open = false
     win:Toggle(true)
@@ -2751,6 +2782,79 @@ function Window:Minimize()
     tween(self._miniScale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back)
 end
 
+-- how the menu is opened without a keyboard: "Bar" (bottom of the screen), "Button" (draggable OPEN pill) or "Off"
+function Window:SetOpenControl(mode)
+    mode = tostring(mode)
+    if mode ~= "Bar" and mode ~= "Button" and mode ~= "Off" then mode = "Bar" end
+    self.OpenControl = mode
+    self.OpenBar.Visible = mode == "Bar"
+    self.MobileButton.Visible = mode == "Button"
+end
+function Window:GetOpenControl() return self.OpenControl end
+
+-- briefly points at the open control: pulsing outline, an arrow and "Press here to open"
+function Window:ShowOpenGuide(duration)
+    local target = (self.OpenControl == "Bar" and self.OpenBar) or (self.OpenControl == "Button" and self.MobileButton) or nil
+    if not target or not target.Visible then return end
+    if self._guide then self._guide() end
+    -- positions are relative to the overlay: its origin can sit below Roblox's top bar while the control's does not
+    local ap, as = target.AbsolutePosition - self.Overlay.AbsolutePosition, target.AbsoluteSize
+    local below = ap.Y < self.Overlay.AbsoluteSize.Y / 2 -- control at the top: guide goes underneath
+    local parts = {}
+
+    local outline = new("Frame", {
+        Parent = self.Overlay, Position = UDim2.fromOffset(ap.X - 6, ap.Y - 6), Size = UDim2.fromOffset(as.X + 12, as.Y + 12),
+        BackgroundColor3 = Theme.Accent, BackgroundTransparency = 1, ZIndex = 90,
+    }, { corner("full") })
+    local ost = new("UIStroke", { Parent = outline, Color = Theme.Accent, Thickness = 2, Transparency = 1 })
+    local label = new("TextLabel", {
+        Parent = self.Overlay, AnchorPoint = Vector2.new(0.5, below and 0 or 1), Size = UDim2.fromOffset(0, 30), AutomaticSize = Enum.AutomaticSize.X,
+        Position = UDim2.fromOffset(ap.X + as.X / 2, below and (ap.Y + as.Y + 40) or (ap.Y - 40)),
+        Text = "Press here to open", W = "SemiBold", TextSize = 14, BackgroundColor3 = Theme.Side, BackgroundTransparency = 1, TextTransparency = 1, ZIndex = 91,
+    }, { corner(8), pad(12, 0, 12, 0) })
+    local lst = stroke(Theme.Accent, 1)
+    lst.Parent = label
+    local arrowHolder, arrow, arrowIsText = makeIcon(self.Overlay, below and "arrow-up" or "arrow-down", 20, Theme.Accent, below and "^" or "v",
+        UDim2.fromOffset(ap.X + as.X / 2, below and (ap.Y + as.Y + 20) or (ap.Y - 20)), Vector2.new(0.5, 0.5))
+    arrowHolder.ZIndex = 91
+    arrow.ZIndex = 91
+    if arrowIsText then arrow.TextTransparency = 1 else arrow.ImageTransparency = 1 end
+    parts = { outline, label, arrowHolder }
+
+    local alive = true
+    local function fade(on, t)
+        tween(outline, { BackgroundTransparency = on and 0.88 or 1 }, t)
+        tween(ost, { Transparency = on and 0 or 1 }, t)
+        tween(label, { BackgroundTransparency = on and 0.05 or 1, TextTransparency = on and 0 or 1 }, t)
+        tween(lst, { Transparency = on and 0.5 or 1 }, t)
+        tween(arrow, arrowIsText and { TextTransparency = on and 0 or 1 } or { ImageTransparency = on and 0 or 1 }, t)
+    end
+    fade(true, 0.3)
+    -- the arrow bobs towards the control and the outline breathes while the guide is up
+    task.spawn(function()
+        local base = arrowHolder.Position
+        local dir = below and -1 or 1
+        while alive do
+            tween(arrowHolder, { Position = base + UDim2.fromOffset(0, 6 * dir) }, 0.35, Enum.EasingStyle.Sine)
+            tween(ost, { Thickness = 3 }, 0.35, Enum.EasingStyle.Sine)
+            task.wait(0.35)
+            if not alive then break end
+            tween(arrowHolder, { Position = base }, 0.35, Enum.EasingStyle.Sine)
+            tween(ost, { Thickness = 1.5 }, 0.35, Enum.EasingStyle.Sine)
+            task.wait(0.35)
+        end
+    end)
+    local function finish()
+        if not alive then return end
+        alive = false
+        self._guide = nil
+        fade(false, 0.3)
+        task.delay(0.32, function() for _, p in ipairs(parts) do p:Destroy() end end)
+    end
+    self._guide = finish
+    task.delay(duration or 2, finish)
+end
+
 function Window:IsOpen() return self.Open end
 
 function Window:Toggle(state)
@@ -2758,6 +2862,7 @@ function Window:Toggle(state)
     state = state and true or false
     if state == self.Open then return end
     self.Open = state
+    if self._barLook then self._barLook() end
     self:_ClosePopup()
     if self._hideSearch then self._hideSearch() end
     if Library._tipTarget then Library._tipTarget = nil self:_HideTip() end
@@ -3447,7 +3552,11 @@ function Window:AddSettingsTab()
     end
     iface:AddToggle({ Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
     iface:AddToggle({ Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
-    iface:AddToggle({ Name = "Show Open Button", NoFastMenu = true, Default = win.MobileButton.Visible, Callback = function(v) win.MobileButton.Visible = v end })
+    iface:AddDropdown({ Name = "Open Control", Options = { "Bar", "Button", "Off" }, Default = win.OpenControl, Tooltip = "How to open the menu without a keyboard", Callback = function(v)
+        if v == win.OpenControl then return end
+        win:SetOpenControl(v)
+        win:ShowOpenGuide(2)
+    end })
     iface:AddButton({ Name = "Reset Window Size", Icon = "maximize-2", NoFastMenu = true, Callback = function() win:SetSize(DEF_W, DEF_H, true) end })
 
     -- Fast Menu
