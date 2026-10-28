@@ -115,7 +115,7 @@ local function initState()
     Library._soundCache = {}
     Library._queued = false
     Library._antiAfk, Library._antiLag = nil, nil
-    Library._artMissing = {}
+    Library._artMissing, Library._artIds = {}, {}
 end
 initState()
 
@@ -2455,7 +2455,7 @@ function Library:_ArtAsset(entry)
     end
     if FS.isfile(path) then
         local ok, id = pcall(ca, path)
-        if ok and id then return id end
+        if ok and id then self._artIds[entry.Image or entry.File] = id return id end
     end
     return nil
 end
@@ -2482,10 +2482,10 @@ local function artPlaceholder(parent, name)
     return f
 end
 
-local ART_MARGIN = 16 -- gap between the art and the side of the screen (the figures are cut at the bottom, so they sit on the edge)
+local ART_MARGIN = 16 -- default gap between the art and the side of the screen (the figures are cut at the bottom, so they sit on the edge)
 
 local function buildArt(win, cfg)
-    local A = { List = {}, Name = "Off", Side = "Right", Size = 0.6, Opacity = 1 } -- Size: share of the screen height
+    local A = { List = {}, Name = "Off", Side = "Right", Size = 0.6, Opacity = 1, Offset = ART_MARGIN } -- Size: share of the screen height; Offset: px from the side
     if cfg.Art ~= false then A.List = type(cfg.Art) == "table" and cfg.Art or Library.Art end
     local ratio = new("UIAspectRatioConstraint", { AspectRatio = 0.62, DominantAxis = Enum.DominantAxis.Height })
     local holder = new("CanvasGroup", {
@@ -2497,7 +2497,7 @@ local function buildArt(win, cfg)
 
     local function home()
         local left = A.Side == "Left"
-        return UDim2.new(left and 0 or 1, left and ART_MARGIN or -ART_MARGIN, 1, 0)
+        return UDim2.new(left and 0 or 1, left and A.Offset or -A.Offset, 1, 0)
     end
     local token = 0
     local function render()
@@ -2508,6 +2508,12 @@ local function buildArt(win, cfg)
         holder.Visible = entry ~= nil
         if not entry then return end
         ratio.AspectRatio = entry.Ratio or 0.62
+        -- already loaded once: show it straight away (Random swaps pictures on every open)
+        local cached = Library._artIds[entry.Image or entry.File or ""]
+        if cached then
+            new("ImageLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Fit, Image = cached })
+            return
+        end
         local ph = artPlaceholder(stage, entry.Name)
         task.spawn(function()
             local id = Library:_ArtAsset(entry)
@@ -2526,13 +2532,22 @@ local function buildArt(win, cfg)
     end
     function A.Set(name)
         A.Name, A.Current = tostring(name), nil
-        if A.Name == "Random" and #A.List > 0 then
-            A.Current = A.List[rnd:NextInteger(1, #A.List)]
+        if A.Name == "Random" then
+            A.Current = A.PickRandom()
         else
             for _, e in ipairs(A.List) do if e.Name == A.Name then A.Current = e end end
         end
         render()
         A.Place()
+    end
+    -- a random slot, never the one on screen now
+    function A.PickRandom()
+        local n = #A.List
+        if n == 0 then return nil end
+        if n == 1 then return A.List[1] end
+        local e
+        repeat e = A.List[rnd:NextInteger(1, n)] until e ~= A.Current
+        return e
     end
     function A.Names()
         local t = { "Off", "Random" }
@@ -2540,6 +2555,10 @@ local function buildArt(win, cfg)
         return t
     end
     function A.OnToggle(open)
+        if open and A.Name == "Random" then
+            A.Current = A.PickRandom()
+            render()
+        end
         if not A.Current then return end
         if open then
             -- rises from the bottom edge a moment after the window opens
@@ -3323,6 +3342,7 @@ function Window:SetArt(name) self.Art.Set(name) end
 function Window:GetArt() return self.Art.Name end
 function Window:SetArtSide(side) self.Art.Side = side == "Left" and "Left" or "Right" self.Art.Place() end
 function Window:SetArtSize(k) self.Art.Size = math.clamp(tonumber(k) or 0.6, 0.2, 1) self.Art.Place() end
+function Window:SetArtOffset(px) self.Art.Offset = math.clamp(tonumber(px) or ART_MARGIN, 0, 600) self.Art.Place() end
 function Window:SetArtOpacity(k) self.Art.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.Art.Place() end
 
 function Window:SetBlur(b)
@@ -4029,6 +4049,7 @@ function Window:AddSettingsTab()
         pref(atm, "AddDropdown", { Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
         pref(atm, "AddDropdown", { Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
         pref(atm, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
+        pref(atm, "AddSlider", { Name = "Art Offset", Min = 0, Max = 400, Default = win.Art.Offset, Suffix = " px", Tooltip = "Distance from the side of the screen", Callback = function(v) win:SetArtOffset(v) end })
         pref(atm, "AddSlider", { Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
     end
 
