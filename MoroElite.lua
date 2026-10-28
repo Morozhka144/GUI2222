@@ -645,12 +645,15 @@ function Library:_SoundAsset(name)
     return "rbxasset://sounds/electronicpingshort.wav"
 end
 
+-- volume is 0..1 (the 0-100% slider); 100% plays at SOUND_GAIN x the default Roblox loudness
+local SOUND_GAIN = 2
+
 function Library:PlaySound(name, volume)
     local win = self.Window
     task.spawn(function()
         local id = self:_SoundAsset(name)
         if not win or not win.Gui or not win.Gui.Parent then return end
-        local s = new("Sound", { SoundId = id, Volume = volume or win.NotifySoundVolume or 0.5, Parent = win.Gui })
+        local s = new("Sound", { SoundId = id, Volume = (volume or win.NotifySoundVolume or 0.5) * SOUND_GAIN, Parent = win.Gui })
         s:Play()
         s.Ended:Once(function() s:Destroy() end)
         task.delay(10, function() if s.Parent then s:Destroy() end end)
