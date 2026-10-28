@@ -47,6 +47,7 @@ local Library = {
         { Name = "Reze (Gym)", Image = "reze_gym.png", Ratio = 0.405 },
         { Name = "Makima", Image = "makima.png", Ratio = 0.493 },
         { Name = "Marin", Image = "marin.png", Ratio = 0.486 },
+        { Name = "Marin2", Image = "marin2.png", Ratio = 0.486 },
         { Name = "Tsunade", Image = "tsunade.png", Ratio = 0.586 },
         { Name = "Hinata", Image = "hinata.png", Ratio = 0.561 },
         { Name = "Kaguya", Image = "kaguya.png", Ratio = 0.53 },
