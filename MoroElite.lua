@@ -669,7 +669,8 @@ function Remote.list(dir)
     while Remote.busy[dir] and os.clock() - t0 < 10 do task.wait(0.05) end
     if Remote.lists[dir] ~= nil then return Remote.lists[dir] or nil end
     Remote.busy[dir] = true
-    local ok, arr = pcall(HttpService.JSONDecode, HttpService, httpGet(Library.RepoApi .. dir) or "")
+    -- the time in the query keeps the executor's HttpGet from answering with a copy from earlier in the session
+    local ok, arr = pcall(HttpService.JSONDecode, HttpService, httpGet(Library.RepoApi .. dir .. "?ref=main&t=" .. os.time()) or "")
     local out = false
     if ok and type(arr) == "table" and arr[1] then
         out = {}
@@ -2604,13 +2605,18 @@ local function buildArt(win, cfg)
         A.Place()
     end
     -- a random slot, never the one on screen now
+    -- prefers pictures that are already loaded, so opening the menu never shows a placeholder
+    -- while the rest are still downloading in the background
+    local function ready(e) return Library._artIds[tostring(e.Image or e.File or "")] ~= nil end
     function A.PickRandom()
-        local n = #A.List
-        if n == 0 then return nil end
-        if n == 1 then return A.List[1] end
-        local e
-        repeat e = A.List[rnd:NextInteger(1, n)] until e ~= A.Current
-        return e
+        local loaded, others = {}, {}
+        for _, e in ipairs(A.List) do
+            if e ~= A.Current then table.insert(ready(e) and loaded or others, e) end
+        end
+        if #loaded > 0 then return loaded[rnd:NextInteger(1, #loaded)] end
+        if A.Current and ready(A.Current) then return A.Current end
+        if #others > 0 then return others[rnd:NextInteger(1, #others)] end
+        return A.Current
     end
     function A.Names()
         local t = { "Off", "Random" }
@@ -2618,8 +2624,8 @@ local function buildArt(win, cfg)
         return t
     end
     -- match the list to the repo's Art/ folder: pictures uploaded there show up without touching the script,
-    -- deleted ones disappear. Runs once in the background; nothing changes when GitHub can't be reached.
-    task.spawn(function()
+    -- deleted ones disappear. Nothing changes when GitHub can't be reached.
+    local function syncList()
         if A.List ~= Library.Art then return end
         local remote = Remote.list("Art")
         if not remote then return end
@@ -2643,6 +2649,18 @@ local function buildArt(win, cfg)
         if dd then dd.Refresh(A.Names(), true) end
         -- the saved choice may be a picture that only now appeared
         if not A.Current and A.Name ~= "Off" then A.Set(A.Name) end
+    end
+    -- then download and preload every picture one by one, so switching (and Random) is instant later
+    task.spawn(function()
+        syncList()
+        local CP = S("ContentProvider")
+        for _, e in ipairs(A.List) do
+            if Library.Window ~= win then return end
+            if not ready(e) then
+                local id = Library:_ArtAsset(e)
+                if id then pcall(CP.PreloadAsync, CP, { id }) end
+            end
+        end
     end)
     function A.OnToggle(open)
         if open and A.Name == "Random" then
@@ -2680,6 +2698,7 @@ local function getGuiParent()
 end
 
 local MIN_W, MIN_H, MAX_W, MAX_H = 480, 300, 1200, 800
+local BAR_W = 140 -- default length of the bottom open bar
 local DEF_W, DEF_H = 780, 500
 local SIDE_W, HEAD_H = 196, 58
 
@@ -2706,6 +2725,7 @@ function Library:CreateWindow(cfg)
     win.NotifySoundName = cfg.NotifySoundName or "Soft"
     win.NotifySoundVolume = cfg.NotifySoundVolume or 0.5
     win.BlurEnabled = cfg.Blur ~= false
+    win.BarWidth = BAR_W
     win.Tabs, win.Open = {}, false
     win._search, win._ui, win._top = {}, {}, {}
     win._unread = 0
@@ -3017,19 +3037,19 @@ function Library:CreateWindow(cfg)
     -- Bottom bar: a thin pill at the bottom centre of the screen (like a phone's home indicator);
     -- the default way to open the menu without a keyboard. Hit area is bigger than the line itself.
     local bar = new("TextButton", {
-        Parent = Gui, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -4), Size = UDim2.fromOffset(220, 24),
+        Parent = Gui, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -4), Size = UDim2.fromOffset(BAR_W + 80, 24),
         BackgroundTransparency = 1, Text = "", Visible = false,
     })
     local barGlow = glow(bar, Theme.Accent, 30, 1)
     trackAccent(barGlow, "ImageColor3")
     local barLine = new("Frame", {
-        Parent = bar, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(140, 5),
+        Parent = bar, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(BAR_W, 5),
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.35,
     }, { corner("full") })
     local barHover = false
     local function barLook()
         tween(barLine, {
-            Size = UDim2.fromOffset(barHover and 176 or 140, barHover and 6 or 5),
+            Size = UDim2.fromOffset(math.floor(win.BarWidth * (barHover and 1.25 or 1)), barHover and 6 or 5),
             BackgroundColor3 = barHover and Theme.Accent or WHITE,
             BackgroundTransparency = barHover and 0 or (win.Open and 0.6 or 0.35),
         }, 0.25)
@@ -3244,7 +3264,7 @@ function Library:CreateWindow(cfg)
     -- once the splash is gone, show for 2 s where the menu can be reopened from
     if cfg.OpenGuide ~= false then task.delay(1.7, function() if Library.Window == win then win:ShowOpenGuide(2) end end) end
 
-    win.Effects.Set(prefs["Background Effect"] or cfg.Effect or "Sakura")
+    win.Effects.Set(prefs["Background Effect"] or cfg.Effect or "Fireflies")
     win.Art.Set(prefs["Character Art"] or cfg.ArtDefault or (cfg.Art == false and "Off") or "Random")
 
     win.Open = false
@@ -3320,6 +3340,13 @@ function Window:SetOpenControl(mode)
     self.MobileButton.Visible = mode == "Button"
 end
 function Window:GetOpenControl() return self.OpenControl end
+
+-- length of the bottom open bar in px; its hit area stays 80 px wider
+function Window:SetBarWidth(px)
+    self.BarWidth = math.clamp(tonumber(px) or BAR_W, 40, 600)
+    self.OpenBar.Size = UDim2.fromOffset(self.BarWidth + 80, 24)
+    self._barLook()
+end
 
 -- briefly points at the open control: pulsing outline, an arrow and "Press here to open"
 function Window:ShowOpenGuide(duration)
@@ -4129,6 +4156,7 @@ function Window:AddSettingsTab()
         win:SetOpenControl(v)
         win:ShowOpenGuide(2)
     end })
+    pref(iface, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
     iface:AddButton({ Name = "Reset Window Size", Icon = "maximize-2", NoFastMenu = true, Callback = function() win:SetSize(DEF_W, DEF_H, true) end })
 
     -- Atmosphere: background particles and the character art
