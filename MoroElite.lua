@@ -29,15 +29,14 @@ end
 local Library = {
     Version = "2.0.0",
     Folder = "MoroLumina",
-    SoundBaseUrl = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Sounds/",
     SoundNames = { "Soft", "Payment", "Tuntun", "Voiced", "Litvin", "Vibe", "Loader", "Warn", "Error" },
     SoundFiles = {
         Soft = "soft.mp3", Payment = "payment.mp3", Tuntun = "tuntun.mp3", Voiced = "voiced.mp3", Litvin = "Litvin.mp3",
         Vibe = "vibe.mp3", Loader = "Loader.mp3", Warn = "Warn.mp3", Error = "Error.mp3",
     },
-    -- character art: PNGs in the repo's Art/ folder, downloaded once into MoroLumina/Art (like the sounds).
-    -- All are trimmed to the figure and 1000 px tall, so they show at about the same scale; Ratio = width / height.
-    ArtBaseUrl = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/Art/",
+    -- character art: PNGs in the repo's Art/ folder, kept in sync with MoroLumina/Art (like the sounds). This list
+    -- sets the order and names; other pictures in Art/ are added after it. These are trimmed to the figure and
+    -- 1000 px tall, so they show at about the same scale; Ratio = width / height (read from the PNG when missing).
     Art = {
         { Name = "Alya", Image = "alya.png", Ratio = 0.565 },
         { Name = "Alya (Hoodie)", Image = "alya_hoodie.png", Ratio = 0.495 },
@@ -48,7 +47,7 @@ local Library = {
         { Name = "Makima", Image = "makima.png", Ratio = 0.493 },
         { Name = "Marin", Image = "marin.png", Ratio = 0.486 },
         { Name = "Marin2", Image = "marin2.png", Ratio = 0.486 },
-        { Name = "Tsunade", Image = "tsunade.png", Ratio = 0.586 },
+        { Name = "Yuki", Image = "yuki.png", Ratio = 0.586 },
         { Name = "Hinata", Image = "hinata.png", Ratio = 0.561 },
         { Name = "Kaguya", Image = "kaguya.png", Ratio = 0.53 },
         { Name = "Sakura", Image = "sakura.png", Ratio = 0.651 },
@@ -657,22 +656,73 @@ end
 function Library:OnUnload(fn) table.insert(self._OnUnload, fn) end
 
 ----------------------------------------------------------------------
+-- Repo sync: files from the repo's Sounds/ and Art/ folders are cached in <Folder>/<dir>. A manifest of git
+-- shas (<Folder>/<dir>/.manifest.json) tells which cached files changed on GitHub and must be downloaded again.
+----------------------------------------------------------------------
+Library.RepoApi = "https://api.github.com/repos/Morozhka144/GUI2222/contents/"
+Library.RepoRaw = "https://raw.githubusercontent.com/Morozhka144/GUI2222/main/"
+local Remote = { lists = {}, busy = {}, man = {} }
+
+-- { file name -> sha } of a repo folder, asked once per session; nil when GitHub can't be reached
+function Remote.list(dir)
+    local t0 = os.clock()
+    while Remote.busy[dir] and os.clock() - t0 < 10 do task.wait(0.05) end
+    if Remote.lists[dir] ~= nil then return Remote.lists[dir] or nil end
+    Remote.busy[dir] = true
+    local ok, arr = pcall(HttpService.JSONDecode, HttpService, httpGet(Library.RepoApi .. dir) or "")
+    local out = false
+    if ok and type(arr) == "table" and arr[1] then
+        out = {}
+        for _, f in ipairs(arr) do
+            if type(f) == "table" and f.type == "file" and f.name then out[f.name] = f.sha end
+        end
+    end
+    Remote.lists[dir], Remote.busy[dir] = out, nil
+    return out or nil
+end
+
+function Remote.manifest(dir)
+    if not Remote.man[dir] then
+        local ok, t = pcall(HttpService.JSONDecode, HttpService, FS.read(Library.Folder .. "/" .. dir .. "/.manifest.json") or "")
+        Remote.man[dir] = (ok and type(t) == "table") and t or {}
+    end
+    return Remote.man[dir]
+end
+
+-- local path of a repo file, downloaded when missing or changed on GitHub; nil if it can't be had.
+-- valid(body) rejects error pages.
+function Remote.fetch(dir, file, valid)
+    local folder = Library.Folder .. "/" .. dir
+    local path = folder .. "/" .. file
+    local remote = Remote.list(dir)
+    local sha = remote and remote[file]
+    local man = Remote.manifest(dir)
+    if not FS.isfile(path) or (sha and man[file] ~= sha) then
+        -- the sha in the query skips the raw CDN's copy of the old file
+        local body = httpGet(Library.RepoRaw .. dir .. "/" .. file .. (sha and ("?v=" .. sha:sub(1, 12)) or ""))
+        if valid(body) then
+            FS.mkdirs(folder)
+            FS.write(path, body)
+            if sha then
+                man[file] = sha
+                FS.write(folder .. "/.manifest.json", HttpService:JSONEncode(man))
+            end
+        end
+    end
+    return FS.isfile(path) and path or nil
+end
+Library._Remote = Remote
+
+----------------------------------------------------------------------
 -- Sounds
 ----------------------------------------------------------------------
 function Library:_SoundAsset(name)
     if self._soundCache[name] then return self._soundCache[name] end
     local file = self.SoundFiles[name] or (name .. ".mp3")
-    local path = self.Folder .. "/Sounds/" .. file
     local ca = getcustomasset or getsynasset
     if ca then
-        if not FS.isfile(path) then
-            local body = httpGet(self.SoundBaseUrl .. file)
-            if body and #body > 1000 then
-                FS.mkdirs(self.Folder .. "/Sounds")
-                FS.write(path, body)
-            end
-        end
-        if FS.isfile(path) then
+        local path = Remote.fetch("Sounds", file, function(b) return type(b) == "string" and #b > 1000 end)
+        if path then
             local ok, id = pcall(ca, path)
             if ok and id then self._soundCache[name] = id return id end
         end
@@ -2428,7 +2478,7 @@ local function isImage(body)
     return type(body) == "string" and #body > 200 and (body:sub(1, 4) == "\137PNG" or body:sub(1, 3) == "\255\216\255")
 end
 
--- entry.Image: "rbxassetid://..", an asset id, an http(s) url or a file name (looked up in <Folder>/Art, then ArtBaseUrl)
+-- entry.Image: "rbxassetid://..", an asset id, an http(s) url or a file name in the repo's Art/ folder
 function Library:_ArtAsset(entry)
     local img = tostring(entry.Image or entry.File or "")
     if img == "" then return nil end
@@ -2436,28 +2486,40 @@ function Library:_ArtAsset(entry)
     if tonumber(img) then return "rbxassetid://" .. img end
     local ca = getcustomasset or getsynasset
     if not ca then return nil end
-    local url, file
+    local path
     if img:find("^https?://") then
-        url = img
-        file = (img:gsub("[?#].*$", "")):match("[^/]+$") or "art.png"
+        -- outside the repo: downloaded once, never re-checked
+        path = self.Folder .. "/Art/" .. ((img:gsub("[?#].*$", "")):match("[^/]+$") or "art.png")
+        if not FS.isfile(path) and not self._artMissing[img] then
+            local body = httpGet(img)
+            if isImage(body) then
+                FS.mkdirs(self.Folder .. "/Art")
+                FS.write(path, body)
+            else
+                self._artMissing[img] = true
+            end
+        end
+        if not FS.isfile(path) then path = nil end
     else
-        url, file = self.ArtBaseUrl .. img, img
+        path = Remote.fetch("Art", img, isImage)
     end
-    local path = self.Folder .. "/Art/" .. file
-    if not FS.isfile(path) and not self._artMissing[url] then
-        local body = httpGet(url)
-        if isImage(body) then
-            FS.mkdirs(self.Folder .. "/Art")
-            FS.write(path, body)
-        else
-            self._artMissing[url] = true
+    if not path then return nil end
+    -- pictures without a Ratio (added straight to the repo) get it from the PNG header
+    if not entry.Ratio then
+        local head = FS.read(path)
+        if head and head:sub(1, 4) == "\137PNG" and #head > 24 then
+            local w, h = string.unpack(">I4I4", head, 17)
+            if h > 0 then entry.Ratio = w / h end
         end
     end
-    if FS.isfile(path) then
-        local ok, id = pcall(ca, path)
-        if ok and id then self._artIds[entry.Image or entry.File] = id return id end
-    end
+    local ok, id = pcall(ca, path)
+    if ok and id then self._artIds[img] = id return id end
     return nil
+end
+
+-- "alya_cat.png" -> "Alya Cat"
+local function artName(file)
+    return (file:gsub("%.%w+$", ""):gsub("[_%-]+", " "):gsub("(%a)(%w*)", function(a, b) return a:upper() .. b end))
 end
 
 local function artPlaceholder(parent, name)
@@ -2518,6 +2580,7 @@ local function buildArt(win, cfg)
         task.spawn(function()
             local id = Library:_ArtAsset(entry)
             if my ~= token or not id then return end
+            ratio.AspectRatio = entry.Ratio or 0.62
             local img = new("ImageLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Fit, Image = id, ImageTransparency = 1 })
             tween(img, { ImageTransparency = 0 }, 0.3)
             tween(ph, { BackgroundTransparency = 1 }, 0.2)
@@ -2554,6 +2617,33 @@ local function buildArt(win, cfg)
         for _, e in ipairs(A.List) do table.insert(t, e.Name) end
         return t
     end
+    -- match the list to the repo's Art/ folder: pictures uploaded there show up without touching the script,
+    -- deleted ones disappear. Runs once in the background; nothing changes when GitHub can't be reached.
+    task.spawn(function()
+        if A.List ~= Library.Art then return end
+        local remote = Remote.list("Art")
+        if not remote then return end
+        local list, known = {}, {}
+        for _, e in ipairs(A.List) do
+            local img = tostring(e.Image or "")
+            known[img] = true
+            if remote[img] or img:find("^rbx") or img:find("^https?://") or tonumber(img) then table.insert(list, e) end
+        end
+        local added = {}
+        for file in pairs(remote) do
+            local low = file:lower()
+            if not known[file] and (low:find("%.png$") or low:find("%.jpe?g$")) then table.insert(added, file) end
+        end
+        table.sort(added)
+        for _, file in ipairs(added) do table.insert(list, { Name = artName(file), Image = file }) end
+        if #list == #A.List and #added == 0 then return end
+        A.List = list
+        Library.Art = list
+        local dd = win.Prefs and win.Prefs["Character Art"]
+        if dd then dd.Refresh(A.Names(), true) end
+        -- the saved choice may be a picture that only now appeared
+        if not A.Current and A.Name ~= "Off" then A.Set(A.Name) end
+    end)
     function A.OnToggle(open)
         if open and A.Name == "Random" then
             A.Current = A.PickRandom()
