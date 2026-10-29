@@ -54,6 +54,17 @@ local Library = {
         { Name = "Frieren", Image = "frieren.png", Ratio = 0.407 },
         { Name = "Neko", Image = "neko.png", Ratio = 0.5 },
         { Name = "Kitty", Image = "kitty.png", Ratio = 0.484 },
+        { Name = "Miku", Image = "miku.png", Ratio = 0.639 },
+        { Name = "Cat Cap", Image = "cat_cap.png", Ratio = 0.467 },
+        { Name = "Shh", Image = "shh.png", Ratio = 0.483 },
+        { Name = "Mitsuri & Shinobu", Image = "maids.png", Ratio = 0.691 },
+    },
+    -- art over the window (a character lying on its top edge): PNGs in the repo's MenuArt/ folder, synced like Art/
+    MenuArt = {
+        { Name = "Alya", Image = "alya.png", Ratio = 3.827 },
+        { Name = "Makima", Image = "makima.png", Ratio = 1.856 },
+        { Name = "Mai", Image = "mai.png", Ratio = 4.109 },
+        { Name = "Pinky", Image = "pinky.png", Ratio = 2.813 },
     },
     LucideUrls = {
         "https://raw.githubusercontent.com/Morozhka144/GUI2222/refs/heads/main/lucide-roblox.luau",
@@ -84,6 +95,7 @@ local Theme = {
 }
 Library.Theme = Theme
 local WHITE, BLACK = Color3.new(1, 1, 1), Color3.new(0, 0, 0)
+local IS_MOBILE = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
 Library.Accents = {
     { "Emerald", rgb(46, 204, 113) }, { "Cyan", rgb(0, 210, 230) }, { "Purple", rgb(140, 100, 255) },
@@ -2412,7 +2424,7 @@ Effects.Bubbles = {
 Library.EffectNames = { "Off", "Sakura", "Snow", "Rain", "Stars", "Fireflies", "Embers", "Bubbles" }
 
 local function buildEffects(win)
-    local E = { Name = "Off", Density = 1, parts = {} }
+    local E = { Name = "Off", Density = 1, Speed = 1, parts = {} }
     -- the whole screen, behind the window (and the art); shown while the menu is open
     local layer = new("Frame", { Parent = win.Gui, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, ZIndex = 0 })
     local function dims()
@@ -2445,7 +2457,7 @@ local function buildEffects(win)
     local t = 0
     connect(RunService.RenderStepped, function(dt)
         if #E.parts == 0 or not win.Open then return end
-        dt = math.min(dt, 0.1)
+        dt = math.min(dt, 0.1) * E.Speed
         t += dt
         local def = Effects[E.Name]
         local W, H = dims()
@@ -2465,6 +2477,7 @@ local function buildEffects(win)
         E.Density = math.clamp(tonumber(d) or 1, 0.2, 3)
         queue()
     end
+    function E.SetSpeed(k) E.Speed = math.clamp(tonumber(k) or 1, 0.1, 3) end
     function E.OnToggle(open)
         if open then layer.Visible = true
         else task.delay(0.2, function() if not win.Open then layer.Visible = false end end) end
@@ -2479,8 +2492,9 @@ local function isImage(body)
     return type(body) == "string" and #body > 200 and (body:sub(1, 4) == "\137PNG" or body:sub(1, 3) == "\255\216\255")
 end
 
--- entry.Image: "rbxassetid://..", an asset id, an http(s) url or a file name in the repo's Art/ folder
-function Library:_ArtAsset(entry)
+-- entry.Image: "rbxassetid://..", an asset id, an http(s) url or a file name in the repo folder dir (default "Art")
+function Library:_ArtAsset(entry, dir)
+    dir = dir or "Art"
     local img = tostring(entry.Image or entry.File or "")
     if img == "" then return nil end
     if img:find("^rbxasset") or img:find("^rbxthumb") or img:find("^rbxgameasset") then return img end
@@ -2490,11 +2504,11 @@ function Library:_ArtAsset(entry)
     local path
     if img:find("^https?://") then
         -- outside the repo: downloaded once, never re-checked
-        path = self.Folder .. "/Art/" .. ((img:gsub("[?#].*$", "")):match("[^/]+$") or "art.png")
+        path = self.Folder .. "/" .. dir .. "/" .. ((img:gsub("[?#].*$", "")):match("[^/]+$") or "art.png")
         if not FS.isfile(path) and not self._artMissing[img] then
             local body = httpGet(img)
             if isImage(body) then
-                FS.mkdirs(self.Folder .. "/Art")
+                FS.mkdirs(self.Folder .. "/" .. dir)
                 FS.write(path, body)
             else
                 self._artMissing[img] = true
@@ -2502,7 +2516,7 @@ function Library:_ArtAsset(entry)
         end
         if not FS.isfile(path) then path = nil end
     else
-        path = Remote.fetch("Art", img, isImage)
+        path = Remote.fetch(dir, img, isImage)
     end
     if not path then return nil end
     -- pictures without a Ratio (added straight to the repo) get it from the PNG header
@@ -2514,7 +2528,7 @@ function Library:_ArtAsset(entry)
         end
     end
     local ok, id = pcall(ca, path)
-    if ok and id then self._artIds[img] = id return id end
+    if ok and id then self._artIds[dir .. "/" .. img] = id return id end
     return nil
 end
 
@@ -2545,20 +2559,37 @@ local function artPlaceholder(parent, name)
     return f
 end
 
-local ART_MARGIN = 16 -- default gap between the art and the side of the screen (the figures are cut at the bottom, so they sit on the edge)
+local ART_MARGIN = 16 -- default gap between the corner art and the side of the screen (the figures are cut at the bottom, so they sit on the edge)
 
-local function buildArt(win, cfg)
-    local A = { List = {}, Name = "Off", Side = "Right", Size = 0.6, Opacity = 1, Offset = ART_MARGIN } -- Size: share of the screen height; Offset: px from the side
-    if cfg.Art ~= false then A.List = type(cfg.Art) == "table" and cfg.Art or Library.Art end
-    local ratio = new("UIAspectRatioConstraint", { AspectRatio = 0.62, DominantAxis = Enum.DominantAxis.Height })
+-- kind "Corner": a figure standing in a bottom corner of the screen, behind the window. Size = share of the screen
+--   height, Offset = px from the side, Side = "Right" / "Left".
+-- kind "Menu": a character lying on the window's top edge, drawn over it. Size = share of the window width,
+--   Offset = position along the top edge (0 = left, 1 = right), Sink = how much of the picture overlaps the window.
+local function buildArt(win, cfg, kind)
+    local menu = kind == "Menu"
+    local A = {
+        Kind = kind, Dir = menu and "MenuArt" or "Art", Pref = menu and "Menu Art" or "Character Art",
+        List = {}, Name = "Off", Side = "Right", Opacity = 1,
+        Size = menu and 0.6 or (IS_MOBILE and 0.45 or 0.6), Offset = menu and 0.5 or ART_MARGIN, Sink = 0.15,
+    }
+    local base = menu and "MenuArt" or "Art"
+    local given = menu and cfg.MenuArt or cfg.Art
+    if given ~= false then A.List = type(given) == "table" and given or Library[base] end
+    local defRatio = menu and 1 or 0.62
+    local ratio = new("UIAspectRatioConstraint", { AspectRatio = defRatio, DominantAxis = menu and Enum.DominantAxis.Width or Enum.DominantAxis.Height })
+    -- the aspect constraint shrinks the free side: corner art is sized by height, menu art (lying, wide) by width
+    local function box() return menu and UDim2.fromScale(A.Size, 5) or UDim2.fromScale(5, A.Size) end
     local holder = new("CanvasGroup", {
-        Parent = win.Gui, AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromScale(5, A.Size), -- the aspect constraint shrinks the width
-        BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = 1,
+        Parent = menu and win.Root or win.Gui, Size = box(),
+        BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = menu and 3 or 1,
     }, { ratio })
     local stage = new("Frame", { Parent = holder, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 })
     A.Holder = holder
 
+    local function key(e) return A.Dir .. "/" .. tostring(e.Image or e.File or "") end
+    local function ready(e) return Library._artIds[key(e)] ~= nil end
     local function home()
+        if menu then return UDim2.fromScale(A.Offset, 0) end
         local left = A.Side == "Left"
         return UDim2.new(left and 0 or 1, left and A.Offset or -A.Offset, 1, 0)
     end
@@ -2570,18 +2601,18 @@ local function buildArt(win, cfg)
         local entry = A.Current
         holder.Visible = entry ~= nil
         if not entry then return end
-        ratio.AspectRatio = entry.Ratio or 0.62
+        ratio.AspectRatio = entry.Ratio or defRatio
         -- already loaded once: show it straight away (Random swaps pictures on every open)
-        local cached = Library._artIds[entry.Image or entry.File or ""]
+        local cached = Library._artIds[key(entry)]
         if cached then
             new("ImageLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Fit, Image = cached })
             return
         end
         local ph = artPlaceholder(stage, entry.Name)
         task.spawn(function()
-            local id = Library:_ArtAsset(entry)
+            local id = Library:_ArtAsset(entry, A.Dir)
             if my ~= token or not id then return end
-            ratio.AspectRatio = entry.Ratio or 0.62
+            ratio.AspectRatio = entry.Ratio or defRatio
             local img = new("ImageLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), ScaleType = Enum.ScaleType.Fit, Image = id, ImageTransparency = 1 })
             tween(img, { ImageTransparency = 0 }, 0.3)
             tween(ph, { BackgroundTransparency = 1 }, 0.2)
@@ -2589,9 +2620,13 @@ local function buildArt(win, cfg)
         end)
     end
     function A.Place()
-        holder.AnchorPoint = Vector2.new(A.Side == "Left" and 0 or 1, 1)
+        if menu then
+            holder.AnchorPoint = Vector2.new(0.5, 1 - A.Sink)
+        else
+            holder.AnchorPoint = Vector2.new(A.Side == "Left" and 0 or 1, 1)
+        end
         holder.Position = home()
-        holder.Size = UDim2.fromScale(5, A.Size)
+        holder.Size = box()
         if win.Open and A.Current then tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.25) end
     end
     function A.Set(name)
@@ -2604,10 +2639,8 @@ local function buildArt(win, cfg)
         render()
         A.Place()
     end
-    -- a random slot, never the one on screen now
-    -- prefers pictures that are already loaded, so opening the menu never shows a placeholder
-    -- while the rest are still downloading in the background
-    local function ready(e) return Library._artIds[tostring(e.Image or e.File or "")] ~= nil end
+    -- a random slot, never the one on screen now; prefers pictures that are already loaded, so opening the
+    -- menu never shows a placeholder while the rest are still downloading in the background
     function A.PickRandom()
         local loaded, others = {}, {}
         for _, e in ipairs(A.List) do
@@ -2623,11 +2656,11 @@ local function buildArt(win, cfg)
         for _, e in ipairs(A.List) do table.insert(t, e.Name) end
         return t
     end
-    -- match the list to the repo's Art/ folder: pictures uploaded there show up without touching the script,
-    -- deleted ones disappear. Nothing changes when GitHub can't be reached.
+    -- match the list to the repo folder: pictures uploaded there show up without touching the script,
+    -- deleted ones disappear. Nothing changes when GitHub can't be reached or the folder doesn't exist yet.
     local function syncList()
-        if A.List ~= Library.Art then return end
-        local remote = Remote.list("Art")
+        if A.List ~= Library[base] then return end
+        local remote = Remote.list(A.Dir)
         if not remote then return end
         local list, known = {}, {}
         for _, e in ipairs(A.List) do
@@ -2644,11 +2677,13 @@ local function buildArt(win, cfg)
         for _, file in ipairs(added) do table.insert(list, { Name = artName(file), Image = file }) end
         if #list == #A.List and #added == 0 then return end
         A.List = list
-        Library.Art = list
-        local dd = win.Prefs and win.Prefs["Character Art"]
+        Library[base] = list
+        local dd = win.Prefs and win.Prefs[A.Pref]
         if dd then dd.Refresh(A.Names(), true) end
-        -- the saved choice may be a picture that only now appeared
-        if not A.Current and A.Name ~= "Off" then A.Set(A.Name) end
+        -- the saved choice may be a picture that only now appeared; a slot that just disappeared falls back to Random
+        local still = false
+        for _, e in ipairs(list) do if e == A.Current then still = true end end
+        if not still and A.Name ~= "Off" then A.Set(A.Current and "Random" or A.Name) end
     end
     -- then download and preload every picture one by one, so switching (and Random) is instant later
     task.spawn(function()
@@ -2657,7 +2692,7 @@ local function buildArt(win, cfg)
         for _, e in ipairs(A.List) do
             if Library.Window ~= win then return end
             if not ready(e) then
-                local id = Library:_ArtAsset(e)
+                local id = Library:_ArtAsset(e, A.Dir)
                 if id then pcall(CP.PreloadAsync, CP, { id }) end
             end
         end
@@ -2669,8 +2704,8 @@ local function buildArt(win, cfg)
         end
         if not A.Current then return end
         if open then
-            -- rises from the bottom edge a moment after the window opens
-            holder.Position = home() + UDim2.fromOffset(A.Side == "Left" and -20 or 20, 40)
+            -- corner art rises from the bottom edge, menu art drops onto the window, a moment after it opens
+            holder.Position = home() + (menu and UDim2.fromOffset(0, -30) or UDim2.fromOffset(A.Side == "Left" and -20 or 20, 40))
             holder.GroupTransparency = 1
             task.delay(0.1, function()
                 if win.Open then tween(holder, { GroupTransparency = 1 - A.Opacity, Position = home() }, 0.55, Enum.EasingStyle.Quint) end
@@ -2699,7 +2734,9 @@ end
 
 local MIN_W, MIN_H, MAX_W, MAX_H = 480, 300, 1200, 800
 local BAR_W = 140 -- default length of the bottom open bar
-local DEF_W, DEF_H = 780, 500
+-- phones get a smaller window at 75% scale (a saved "UI Scale" still wins)
+local DEF_W, DEF_H = IS_MOBILE and 680 or 780, IS_MOBILE and 440 or 500
+local DEF_SCALE = IS_MOBILE and 0.75 or 1
 local SIDE_W, HEAD_H = 196, 58
 
 function Library:CreateWindow(cfg)
@@ -2741,9 +2778,10 @@ function Library:CreateWindow(cfg)
     win.Blur = new("BlurEffect", { Name = "MoroEliteBlur", Size = 0, Parent = Lighting })
 
     local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1280, 720)
-    local Root = new("Frame", { Name = "Root", Parent = Gui, BackgroundTransparency = 1, Visible = false, ZIndex = 2, Size = UDim2.fromOffset(DEF_W, DEF_H), Position = UDim2.fromOffset(vp.X / 2 - DEF_W / 2, vp.Y / 2 - DEF_H / 2) })
+    local Root = new("Frame", { Name = "Root", Parent = Gui, BackgroundTransparency = 1, Visible = false, ZIndex = 2, Size = UDim2.fromOffset(DEF_W, DEF_H), Position = UDim2.fromOffset(vp.X / 2 - DEF_W * DEF_SCALE / 2, vp.Y / 2 - DEF_H * DEF_SCALE / 2) })
     win.Root = Root
-    win.RootScale = new("UIScale", { Parent = Root })
+    Library._Scale = DEF_SCALE
+    win.RootScale = new("UIScale", { Parent = Root, Scale = DEF_SCALE })
     local Shadow = shadow(Root, 160, 1)
     local AccentGlow = new("ImageLabel", {
         Parent = Root, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, 140, 1, 140),
@@ -2765,7 +2803,8 @@ function Library:CreateWindow(cfg)
     trackAccent(ambient, "ImageColor3")
 
     win.Effects = buildEffects(win)
-    win.Art = buildArt(win, cfg)
+    win.Art = buildArt(win, cfg, "Corner")
+    win.MenuArt = buildArt(win, cfg, "Menu")
 
     -- Cursor-lock bypass
     new("TextButton", { Parent = Canvas, Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, Text = "", Modal = true })
@@ -3266,6 +3305,7 @@ function Library:CreateWindow(cfg)
 
     win.Effects.Set(prefs["Background Effect"] or cfg.Effect or "Fireflies")
     win.Art.Set(prefs["Character Art"] or cfg.ArtDefault or (cfg.Art == false and "Off") or "Random")
+    win.MenuArt.Set(prefs["Menu Art"] or cfg.MenuArtDefault or (cfg.MenuArt == false and "Off") or "Random")
 
     win.Open = false
     win:Toggle(true)
@@ -3421,6 +3461,7 @@ function Window:Toggle(state)
     if self._barLook then self._barLook() end
     self.Effects.OnToggle(state)
     self.Art.OnToggle(state)
+    self.MenuArt.OnToggle(state)
     self:_ClosePopup()
     if self._hideSearch then self._hideSearch() end
     if Library._tipTarget then Library._tipTarget = nil self:_HideTip() end
@@ -3453,6 +3494,7 @@ end
 function Window:SetEffect(name) self.Effects.Set(name) end
 function Window:GetEffect() return self.Effects.Name end
 function Window:SetEffectDensity(d) self.Effects.SetDensity(d) end
+function Window:SetEffectSpeed(k) self.Effects.SetSpeed(k) end
 
 -- character art in the bottom corner of the screen: "Off", "Random" or a slot name from Library.Art / cfg.Art
 function Window:SetArt(name) self.Art.Set(name) end
@@ -3461,6 +3503,14 @@ function Window:SetArtSide(side) self.Art.Side = side == "Left" and "Left" or "R
 function Window:SetArtSize(k) self.Art.Size = math.clamp(tonumber(k) or 0.6, 0.2, 1) self.Art.Place() end
 function Window:SetArtOffset(px) self.Art.Offset = math.clamp(tonumber(px) or ART_MARGIN, 0, 600) self.Art.Place() end
 function Window:SetArtOpacity(k) self.Art.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.Art.Place() end
+
+-- art leaning on the window's top edge: "Off", "Random" or a slot name from Library.MenuArt / cfg.MenuArt
+function Window:SetMenuArt(name) self.MenuArt.Set(name) end
+function Window:GetMenuArt() return self.MenuArt.Name end
+function Window:SetMenuArtPosition(x) self.MenuArt.Offset = math.clamp(tonumber(x) or 0.5, 0, 1) self.MenuArt.Place() end
+function Window:SetMenuArtSize(k) self.MenuArt.Size = math.clamp(tonumber(k) or 0.6, 0.15, 1.5) self.MenuArt.Place() end
+function Window:SetMenuArtOverlap(k) self.MenuArt.Sink = math.clamp(tonumber(k) or 0.15, 0, 0.8) self.MenuArt.Place() end
+function Window:SetMenuArtOpacity(k) self.MenuArt.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.MenuArt.Place() end
 
 function Window:SetBlur(b)
     self.BlurEnabled = b and true or false
@@ -4114,62 +4164,19 @@ function Window:AddSettingsTab()
     end
 
     -- Interface
-    local iface = L:CreateSection({ Name = "Interface", Icon = "palette" })
-    pref(iface, "AddDropdown", { Name = "UI Scale", Options = { "50%", "75%", "100%", "125%", "150%" }, Default = "100%", Callback = function(v)
+    local iface = L:CreateSection({ Name = "Interface", Icon = "monitor" })
+    pref(iface, "AddDropdown", { Name = "UI Scale", Options = { "50%", "75%", "100%", "125%", "150%" }, Default = (DEF_SCALE * 100) .. "%", Callback = function(v)
         win:_SetUIScale((tonumber((tostring(v):gsub("%%", ""))) or 100) / 100)
     end })
     ui.MenuBind = pref(iface, "AddKeybind", { Name = "Menu Toggle", Default = self.ToggleKey, NoBind = true, ChangedCallback = function(k)
         if k then win.ToggleKey = k end
     end })
-    local accNames = {}
-    for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
-    local rainbow = false
-    local customPicker
-    pref(iface, "AddDropdown", { Name = "Accent Color", Options = accNames, Default = "Purple", Callback = function(v)
-        for _, a in ipairs(Library.Accents) do
-            if a[1] == v then
-                Library:SetAccent(a[2])
-                if customPicker then customPicker.Set(a[2], true) end
-            end
-        end
-    end })
-    customPicker = pref(iface, "AddColorPicker", { Name = "Custom Accent", Default = Theme.Accent, Callback = function(c) if not rainbow then Library:SetAccent(c) end end })
-    pref(iface, "AddToggle", { Name = "Rainbow Accent", NoFastMenu = true, Tooltip = "Cycles the accent color through the rainbow", Callback = function(v) rainbow = v end })
-    do
-        local t = 0
-        local acc = 0
-        connect(RunService.Heartbeat, function(dt)
-            if rainbow then
-                t += dt
-                acc += dt
-                if acc >= 1 / 30 then
-                    acc = 0
-                    Library:SetAccent(Color3.fromHSV((t * 0.1) % 1, 0.6, 1))
-                end
-            end
-        end)
-    end
-    pref(iface, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
-    pref(iface, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
     pref(iface, "AddDropdown", { Name = "Open Control", Options = { "Bar", "Button", "Off" }, Default = win.OpenControl, Tooltip = "How to open the menu without a keyboard", Callback = function(v)
         if v == win.OpenControl then return end
         win:SetOpenControl(v)
         win:ShowOpenGuide(2)
     end })
-    pref(iface, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
     iface:AddButton({ Name = "Reset Window Size", Icon = "maximize-2", NoFastMenu = true, Callback = function() win:SetSize(DEF_W, DEF_H, true) end })
-
-    -- Atmosphere: background particles and the character art
-    local atm = L:CreateSection({ Name = "Atmosphere", Icon = "sparkles", Collapsible = true })
-    pref(atm, "AddDropdown", { Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
-    pref(atm, "AddSlider", { Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
-    if #win.Art.List > 0 then
-        pref(atm, "AddDropdown", { Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
-        pref(atm, "AddDropdown", { Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
-        pref(atm, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
-        pref(atm, "AddSlider", { Name = "Art Offset", Min = 0, Max = 400, Default = win.Art.Offset, Suffix = " px", Tooltip = "Distance from the side of the screen", Callback = function(v) win:SetArtOffset(v) end })
-        pref(atm, "AddSlider", { Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
-    end
 
     -- Fast Menu
     local fm = self.FastMenu
@@ -4236,6 +4243,67 @@ function Window:AddSettingsTab()
     ksec:AddSlider({ Name = "HUD Scale", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) kl:SetScale(v / 100) end })
     ksec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Keybind List Lock", Callback = function(v) kl:SetLocked(v) end })
     ksec:AddButton({ Name = "Reset Position", NoFastMenu = true, Flag = "Keybind List Reset", Callback = function() kl:SetPosition(UDim2.new(1, -230, 0.3, 0)) end })
+
+    -- Customization: everything about how the menu looks
+    local ctab = self:CreateTab({ Name = "Customization", Icon = "brush" })
+    self.CustomizationTab = ctab
+    local CL, CR = ctab:Column("left"), ctab:Column("right")
+
+    local theme = CL:CreateSection({ Name = "Theme", Icon = "palette" })
+    local accNames = {}
+    for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
+    local rainbow = false
+    local customPicker
+    pref(theme, "AddDropdown", { Name = "Accent Color", Options = accNames, Default = "Purple", Callback = function(v)
+        for _, a in ipairs(Library.Accents) do
+            if a[1] == v then
+                Library:SetAccent(a[2])
+                if customPicker then customPicker.Set(a[2], true) end
+            end
+        end
+    end })
+    customPicker = pref(theme, "AddColorPicker", { Name = "Custom Accent", Default = Theme.Accent, Callback = function(c) if not rainbow then Library:SetAccent(c) end end })
+    pref(theme, "AddToggle", { Name = "Rainbow Accent", NoFastMenu = true, Tooltip = "Cycles the accent color through the rainbow", Callback = function(v) rainbow = v end })
+    do
+        local t = 0
+        local acc = 0
+        connect(RunService.Heartbeat, function(dt)
+            if rainbow then
+                t += dt
+                acc += dt
+                if acc >= 1 / 30 then
+                    acc = 0
+                    Library:SetAccent(Color3.fromHSV((t * 0.1) % 1, 0.6, 1))
+                end
+            end
+        end)
+    end
+    pref(theme, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
+    pref(theme, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
+    pref(theme, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
+
+    local fx = CL:CreateSection({ Name = "Effects", Icon = "sparkles" })
+    pref(fx, "AddDropdown", { Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
+    pref(fx, "AddSlider", { Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
+    pref(fx, "AddSlider", { Name = "Effect Speed", Min = 10, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectSpeed(v / 100) end })
+
+    if #win.Art.List > 0 then
+        local art = CR:CreateSection({ Name = "Corner Art", Icon = "image" })
+        pref(art, "AddDropdown", { Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
+        pref(art, "AddDropdown", { Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
+        pref(art, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
+        pref(art, "AddSlider", { Name = "Art Offset", Min = 0, Max = 400, Default = win.Art.Offset, Suffix = " px", Tooltip = "Distance from the side of the screen", Callback = function(v) win:SetArtOffset(v) end })
+        pref(art, "AddSlider", { Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
+    end
+    if #win.MenuArt.List > 0 then
+        local ma = win.MenuArt
+        local msec = CR:CreateSection({ Name = "Menu Art", Icon = "layout-panel-top" })
+        pref(msec, "AddDropdown", { Name = "Menu Art", Options = ma.Names(), Default = ma.Name, Tooltip = "A character leaning on the top of the menu", Callback = function(v) win:SetMenuArt(v) end })
+        pref(msec, "AddSlider", { Name = "Menu Art Position", Min = 0, Max = 100, Default = ma.Offset * 100, Suffix = "%", Tooltip = "Where along the top edge: 0% left, 100% right", Callback = function(v) win:SetMenuArtPosition(v / 100) end })
+        pref(msec, "AddSlider", { Name = "Menu Art Size", Min = 15, Max = 150, Default = ma.Size * 100, Suffix = "%", Tooltip = "Width as a share of the window width", Callback = function(v) win:SetMenuArtSize(v / 100) end })
+        pref(msec, "AddSlider", { Name = "Menu Art Overlap", Min = 0, Max = 80, Default = ma.Sink * 100, Suffix = "%", Tooltip = "How much of the picture sinks into the window (arms, elbows)", Callback = function(v) win:SetMenuArtOverlap(v / 100) end })
+        pref(msec, "AddSlider", { Name = "Menu Art Opacity", Min = 10, Max = 100, Default = ma.Opacity * 100, Suffix = "%", Callback = function(v) win:SetMenuArtOpacity(v / 100) end })
+    end
 
     prefsReady = true
 
