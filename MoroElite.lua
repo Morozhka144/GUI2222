@@ -95,6 +95,26 @@ local Theme = {
     Info = rgb(70, 160, 255),
 }
 Library.Theme = Theme
+
+-- surface palettes for Customization > Theme; the accent stays the player's own
+local THEME_KEYS = { "Bg", "Side", "Card", "Field", "FieldHover", "Popup", "Off", "Text", "Sub", "Dim" }
+local function pal(t)
+    local out = { Name = t[1] }
+    for i, k in ipairs(THEME_KEYS) do out[k] = rgb(t[i + 1][1], t[i + 1][2], t[i + 1][3]) end
+    return out
+end
+Library.Themes = {
+    pal({ "Midnight", { 10, 10, 14 }, { 14, 14, 19 }, { 19, 19, 26 }, { 26, 26, 35 }, { 34, 34, 46 }, { 21, 21, 29 }, { 46, 46, 60 }, { 242, 242, 250 }, { 156, 156, 178 }, { 100, 100, 122 } }),
+    pal({ "Abyss", { 4, 4, 6 }, { 8, 8, 10 }, { 13, 13, 16 }, { 20, 20, 24 }, { 28, 28, 34 }, { 15, 15, 18 }, { 40, 40, 48 }, { 240, 240, 245 }, { 150, 150, 160 }, { 95, 95, 105 } }),
+    pal({ "Graphite", { 18, 18, 18 }, { 23, 23, 23 }, { 29, 29, 29 }, { 38, 38, 38 }, { 48, 48, 48 }, { 32, 32, 32 }, { 60, 60, 60 }, { 238, 238, 238 }, { 160, 160, 160 }, { 108, 108, 108 } }),
+    pal({ "Ocean", { 8, 13, 24 }, { 11, 18, 32 }, { 15, 24, 42 }, { 21, 33, 56 }, { 28, 43, 72 }, { 17, 27, 47 }, { 38, 55, 86 }, { 232, 240, 255 }, { 140, 160, 195 }, { 88, 106, 140 } }),
+    pal({ "Sakura", { 20, 10, 16 }, { 26, 13, 21 }, { 34, 18, 28 }, { 45, 24, 37 }, { 58, 31, 48 }, { 38, 20, 31 }, { 75, 42, 62 }, { 252, 236, 244 }, { 196, 150, 175 }, { 135, 96, 118 } }),
+    pal({ "Forest", { 9, 15, 12 }, { 12, 20, 16 }, { 16, 27, 21 }, { 22, 36, 29 }, { 29, 47, 38 }, { 18, 30, 24 }, { 40, 62, 50 }, { 234, 246, 238 }, { 148, 178, 160 }, { 96, 122, 106 } }),
+    pal({ "Crimson", { 16, 8, 9 }, { 21, 10, 12 }, { 28, 14, 16 }, { 38, 19, 22 }, { 50, 25, 29 }, { 31, 15, 18 }, { 66, 34, 38 }, { 250, 236, 238 }, { 190, 150, 155 }, { 130, 96, 100 } }),
+    pal({ "Mocha", { 17, 13, 11 }, { 22, 17, 14 }, { 30, 23, 19 }, { 40, 31, 26 }, { 52, 40, 34 }, { 33, 26, 21 }, { 70, 55, 46 }, { 245, 236, 228 }, { 186, 165, 150 }, { 128, 110, 98 } }),
+    pal({ "Nord", { 36, 41, 51 }, { 41, 46, 57 }, { 46, 52, 64 }, { 59, 66, 82 }, { 67, 76, 94 }, { 48, 54, 67 }, { 76, 86, 106 }, { 236, 239, 244 }, { 180, 188, 204 }, { 128, 138, 158 } }),
+    pal({ "Dracula", { 30, 31, 41 }, { 34, 35, 46 }, { 40, 42, 54 }, { 52, 55, 70 }, { 62, 65, 82 }, { 44, 46, 59 }, { 68, 71, 90 }, { 248, 248, 242 }, { 180, 182, 200 }, { 120, 124, 150 } }),
+}
 local WHITE, BLACK = Color3.new(1, 1, 1), Color3.new(0, 0, 0)
 local IS_MOBILE = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
@@ -128,6 +148,8 @@ local function initState()
     Library._queued = false
     Library._antiAfk, Library._antiLag = nil, nil
     Library._artMissing, Library._artIds = {}, {}
+    -- look knobs (Customization tab): animation speed, corner roundness, text size, second gradient color
+    Library._AnimSpeed, Library._Round, Library._TextScale, Library._Accent2 = 1, 1, 1, nil
 end
 initState()
 
@@ -149,10 +171,13 @@ end
 
 local EASE = Enum.EasingStyle.Quint
 local function tween(o, props, t, style, dir)
-    local tw = TweenService:Create(o, TweenInfo.new(t or 0.2, style or EASE, dir or Enum.EasingDirection.Out), props)
+    local tw = TweenService:Create(o, TweenInfo.new((t or 0.2) / Library._AnimSpeed, style or EASE, dir or Enum.EasingDirection.Out), props)
     tw:Play()
     return tw
 end
+
+-- a delay that matches tween(): scales with the animation speed setting
+local function dly(t) return t / Library._AnimSpeed end
 
 local function F(w) return Font.new(FONT, Enum.FontWeight[w or "Medium"]) end
 
@@ -187,12 +212,23 @@ local function new(class, props, kids)
     if (class == "TextButton" or class == "TextLabel") and props and props.BackgroundColor3 and props.BackgroundTransparency == nil then
         o.BackgroundTransparency = 0
     end
+    -- text size setting: remember the designed size so it can be rescaled later
+    if class == "TextLabel" or class == "TextButton" or class == "TextBox" then
+        o:SetAttribute("TS0", o.TextSize)
+        if Library._TextScale ~= 1 then o.TextSize = math.floor(o.TextSize * Library._TextScale + 0.5) end
+    end
     for _, c in ipairs(kids or {}) do c.Parent = o end
     if parent then o.Parent = parent end
     return o
 end
 
-local function corner(r) return new("UICorner", { CornerRadius = r == "full" and UDim.new(1, 0) or UDim.new(0, r) }) end
+-- R0 keeps the designed radius so the roundness setting can rescale every corner later
+local function corner(r)
+    if r == "full" then return new("UICorner", { CornerRadius = UDim.new(1, 0) }) end
+    local c = new("UICorner", { CornerRadius = UDim.new(0, r * Library._Round) })
+    c:SetAttribute("R0", r)
+    return c
+end
 local function stroke(c, tr, th) return new("UIStroke", { Color = c or WHITE, Transparency = tr or 0.92, Thickness = th or 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }) end
 local function pad(l, t, r, b) return new("UIPadding", { PaddingLeft = UDim.new(0, l or 0), PaddingTop = UDim.new(0, t or 0), PaddingRight = UDim.new(0, r or 0), PaddingBottom = UDim.new(0, b or 0) }) end
 local function vlist(p) return new("UIListLayout", { Padding = UDim.new(0, p or 0) }) end
@@ -201,6 +237,7 @@ local function hlist(p, halign)
 end
 
 local function accent2()
+    if Library._Accent2 then return Library._Accent2 end
     local h, s, v = Theme.Accent:ToHSV()
     return Color3.fromHSV((h + 0.07) % 1, math.min(s * 1.05, 1), v * 0.82)
 end
@@ -2442,7 +2479,7 @@ Effects.Fireflies = {
         p.x = (p.x + math.cos(p.a) * p.sp * dt) % W
         p.y = (p.y + math.sin(p.a) * p.sp * dt) % H
         p.dx, p.dy = p.x, p.y
-        p.obj.ImageColor3 = Theme.Accent
+        p.obj.ImageColor3 = p.color or Theme.Accent
         p.obj.ImageTransparency = 0.3 + 0.55 * (0.5 + 0.5 * math.sin(t * p.f * 3 + p.ph))
         return false
     end,
@@ -2493,7 +2530,7 @@ Effects.Bubbles = {
 Library.EffectNames = { "Off", "Sakura", "Snow", "Rain", "Stars", "Fireflies", "Embers", "Bubbles" }
 
 local function buildEffects(win)
-    local E = { Name = "Off", Density = 1, Speed = 1, parts = {} }
+    local E = { Name = "Off", Density = 1, Speed = 1, Color = nil, Always = false, parts = {} }
     -- the whole screen, behind the window (and the art); shown while the menu is open
     local layer = new("Frame", { Parent = win.Gui, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ClipsDescendants = true, Visible = false, ZIndex = 0 })
     local function dims()
@@ -2511,6 +2548,11 @@ local function buildEffects(win)
         for i = 1, math.max(2, math.floor(def.n * k * E.Density + 0.5)) do
             local p = { i = i }
             p.obj = def.make(layer, i)
+            p.color = E.Color
+            if E.Color then
+                local o = p.obj
+                if o:IsA("ImageLabel") then o.ImageColor3 = E.Color else o.BackgroundColor3 = E.Color end
+            end
             def.spawn(p, W, H, true)
             table.insert(E.parts, p)
         end
@@ -2525,7 +2567,7 @@ local function buildEffects(win)
 
     local t = 0
     connect(RunService.RenderStepped, function(dt)
-        if #E.parts == 0 or not win.Open then return end
+        if #E.parts == 0 or not (win.Open or E.Always) then return end
         dt = math.min(dt, 0.1) * E.Speed
         t += dt
         local def = Effects[E.Name]
@@ -2547,9 +2589,19 @@ local function buildEffects(win)
         queue()
     end
     function E.SetSpeed(k) E.Speed = math.clamp(tonumber(k) or 1, 0.1, 3) end
+    -- nil = each effect's own colors
+    function E.SetColor(c)
+        E.Color = typeof(c) == "Color3" and c or nil
+        rebuild()
+    end
+    -- keep falling over the game while the menu is closed
+    function E.SetAlways(b)
+        E.Always = b and true or false
+        layer.Visible = E.Always or win.Open
+    end
     function E.OnToggle(open)
         if open then layer.Visible = true
-        else task.delay(0.2, function() if not win.Open then layer.Visible = false end end) end
+        else task.delay(0.2, function() if not win.Open and not E.Always then layer.Visible = false end end) end
     end
     return E
 end
@@ -2875,7 +2927,8 @@ function Library:CreateWindow(cfg)
         Parent = Root, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromScale(1, 1), GroupTransparency = 1,
         BackgroundColor3 = Theme.Bg, ZIndex = 2, Active = true, -- clicks on the menu never reach game UI / world behind it
     }, { corner(14) })
-    stroke(WHITE, 0.9).Parent = Canvas
+    win._canvasStroke = stroke(WHITE, 0.9)
+    win._canvasStroke.Parent = Canvas
     win.Canvas = Canvas
     win.AnimScale = new("UIScale", { Parent = Canvas, Scale = 0.94 })
 
@@ -2883,9 +2936,17 @@ function Library:CreateWindow(cfg)
     local ambient = new("ImageLabel", { Parent = Canvas, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -60, 0, 0), Size = UDim2.fromOffset(520, 340), Image = IMG_GLOW, ImageTransparency = 0.9 })
     trackAccent(ambient, "ImageColor3")
 
+    -- optional picture behind the window content (Customization > Window Background)
+    win._bgRatio = new("UIAspectRatioConstraint", { AspectRatio = 0.62, DominantAxis = Enum.DominantAxis.Height })
+    win._bgImage = new("ImageLabel", {
+        Parent = Canvas, AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromScale(5, 1),
+        ImageTransparency = 0.75, Visible = false, ZIndex = 1,
+    }, { win._bgRatio })
+
     win.Effects = buildEffects(win)
     win.Art = buildArt(win, cfg, "Corner")
     win.MenuArt = buildArt(win, cfg, "Menu")
+    win:_SetupMusic()
 
     -- Cursor-lock bypass
     new("TextButton", { Parent = Canvas, Size = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, Text = "", Modal = true })
@@ -2893,7 +2954,7 @@ function Library:CreateWindow(cfg)
     RunService:BindToRenderStep("MoroLumina_Cursor", Enum.RenderPriority.Last.Value + 10, function()
         if win.Open then
             UIS.MouseBehavior = Enum.MouseBehavior.Default
-            UIS.MouseIconEnabled = true
+            UIS.MouseIconEnabled = not win._cursorOn
         end
     end)
 
@@ -2901,7 +2962,8 @@ function Library:CreateWindow(cfg)
     -- Sidebar
     ------------------------------------------------------------------
     local Side = new("Frame", { Parent = Canvas, Size = UDim2.new(0, SIDE_W, 1, 0), BackgroundColor3 = Theme.Side, ZIndex = 2 })
-    new("Frame", { Parent = Side, AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 1, 1, 0), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, ZIndex = 3 })
+    win._side, win.SideW = Side, SIDE_W
+    win._sideLine = new("Frame", { Parent = Side, AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 1, 1, 0), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, ZIndex = 3 })
 
     local brand = new("Frame", { Parent = Side, Size = UDim2.new(1, 0, 0, HEAD_H + 8), BackgroundTransparency = 1, ZIndex = 3 })
     local logoWrap = new("Frame", { Parent = brand, Position = UDim2.fromOffset(16, 15), Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, ZIndex = 3 })
@@ -2966,6 +3028,7 @@ function Library:CreateWindow(cfg)
     -- Header
     ------------------------------------------------------------------
     local Head = new("Frame", { Parent = Canvas, Position = UDim2.fromOffset(SIDE_W, 0), Size = UDim2.new(1, -SIDE_W, 0, HEAD_H), BackgroundTransparency = 1, ZIndex = 3 })
+    win._head = Head
     new("Frame", { Parent = Head, AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, ZIndex = 3 })
     win._pageTitle = new("TextLabel", { Parent = Head, Position = UDim2.fromOffset(22, 10), Size = UDim2.new(0, 220, 0, 22), Text = "", W = "Bold", TextSize = 19, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
     win._pageSub = new("TextLabel", { Parent = Head, Position = UDim2.fromOffset(22, 32), Size = UDim2.new(0, 220, 0, 14), Text = "", W = "Regular", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
@@ -3087,6 +3150,37 @@ function Library:CreateWindow(cfg)
             win.Tip.Position = UDim2.fromOffset(m.X + 14, m.Y + 16)
         end
     end)
+
+    -- custom cursor: accent dot, a ring that lags behind and a short trail (Customization > Custom Cursor)
+    do
+        local cur = new("Frame", { Parent = Overlay, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, Visible = false, ZIndex = 100 })
+        local trail = {}
+        for i = 1, 6 do
+            local d = new("Frame", { Parent = cur, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(7 - i, 7 - i), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.25 + i * 0.11, ZIndex = 100 }, { corner("full") })
+            trackAccent(d, "BackgroundColor3")
+            trail[i] = { obj = d, pos = Vector2.zero }
+        end
+        local ring = new("Frame", { Parent = cur, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(22, 22), BackgroundTransparency = 1, ZIndex = 101 }, { corner("full") })
+        local ringStroke = new("UIStroke", { Parent = ring, Thickness = 1.5, Color = Theme.Accent, Transparency = 0.3 })
+        trackAccent(ringStroke, "Color")
+        local dot = new("Frame", { Parent = cur, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(7, 7), BackgroundColor3 = WHITE, ZIndex = 102 }, { corner("full") })
+        local ringPos = Vector2.zero
+        connect(RunService.RenderStepped, function(dt)
+            local on = win._cursorOn and win.Open and not IS_MOBILE
+            cur.Visible = on
+            if not on then return end
+            local m = UIS:GetMouseLocation()
+            dot.Position = UDim2.fromOffset(m.X, m.Y)
+            ringPos = ringPos:Lerp(m, math.min(1, dt * 18))
+            ring.Position = UDim2.fromOffset(ringPos.X, ringPos.Y)
+            local prev = m
+            for _, t in ipairs(trail) do
+                t.pos = t.pos:Lerp(prev, math.min(1, dt * 28))
+                t.obj.Position = UDim2.fromOffset(t.pos.X, t.pos.Y)
+                prev = t.pos
+            end
+        end)
+    end
 
     win.FastMenu = buildFastMenu(win)
     win.KeybindList = buildKeybindList(win)
@@ -3543,6 +3637,7 @@ function Window:Toggle(state)
     self.Effects.OnToggle(state)
     self.Art.OnToggle(state)
     self.MenuArt.OnToggle(state)
+    if self.Music then self.Music.OnToggle(state) end
     self:_ClosePopup()
     if self._hideSearch then self._hideSearch() end
     if Library._tipTarget then Library._tipTarget = nil self:_HideTip() end
@@ -3554,18 +3649,44 @@ function Window:Toggle(state)
             task.delay(0.16, function() if not self._minimized then mini.Visible = false end end)
         end
         self.Root.Visible = true
-        tween(self.AnimScale, { Scale = 1 }, 0.45, Enum.EasingStyle.Back)
-        tween(self.Canvas, { GroupTransparency = 0 }, 0.3)
+        local style, cv = self.OpenStyle or "Pop", self.Canvas
+        cv.Size, cv.Position = UDim2.fromScale(1, 1), UDim2.fromScale(0.5, 0.5)
+        if style == "Zoom" then
+            self.AnimScale.Scale = 0.6
+            tween(self.AnimScale, { Scale = 1 }, 0.5)
+        elseif style == "Slide" then
+            self.AnimScale.Scale = 1
+            cv.Position = UDim2.new(0.5, 0, 0.5, 60)
+            tween(cv, { Position = UDim2.fromScale(0.5, 0.5) }, 0.5)
+        elseif style == "Fade" then
+            self.AnimScale.Scale = 1
+        elseif style == "TV" then
+            -- a thin line that opens up like an old TV turning on
+            self.AnimScale.Scale = 1
+            cv.Size = UDim2.fromScale(1, 0.02)
+            tween(cv, { Size = UDim2.fromScale(1, 1) }, 0.4, Enum.EasingStyle.Quart)
+        else
+            tween(self.AnimScale, { Scale = 1 }, 0.45, Enum.EasingStyle.Back)
+        end
+        tween(cv, { GroupTransparency = 0 }, style == "TV" and 0.12 or 0.3)
         tween(self._Shadow, { ImageTransparency = 0.2 }, 0.4)
         tween(self._AccentGlow, { ImageTransparency = 0.88 }, 0.6)
         if self.BlurEnabled then tween(self.Blur, { Size = 14 }, 0.4) end
     else
-        tween(self.AnimScale, { Scale = 0.94 }, 0.22, Enum.EasingStyle.Quad)
+        local style = self.OpenStyle or "Pop"
+        if style == "TV" then
+            tween(self.Canvas, { Size = UDim2.fromScale(1, 0.02) }, 0.2, Enum.EasingStyle.Quad)
+        elseif style == "Slide" then
+            tween(self.Canvas, { Position = UDim2.new(0.5, 0, 0.5, 40) }, 0.22, Enum.EasingStyle.Quad)
+        elseif style ~= "Fade" then
+            tween(self.AnimScale, { Scale = style == "Zoom" and 0.7 or 0.94 }, 0.22, Enum.EasingStyle.Quad)
+        end
         tween(self.Canvas, { GroupTransparency = 1 }, 0.2)
+        if self._cursorOn then UIS.MouseIconEnabled = true end
         tween(self._Shadow, { ImageTransparency = 1 }, 0.2)
         tween(self._AccentGlow, { ImageTransparency = 1 }, 0.2)
         tween(self.Blur, { Size = 0 }, 0.25)
-        task.delay(0.22, function()
+        task.delay(dly(0.22), function()
             if not self.Open and self.Root.Parent then self.Root.Visible = false end
         end)
     end
@@ -3592,6 +3713,243 @@ function Window:SetMenuArtPosition(x) self.MenuArt.Offset = math.clamp(tonumber(
 function Window:SetMenuArtSize(k) self.MenuArt.Size = math.clamp(tonumber(k) or 0.6, 0.15, 1.5) self.MenuArt.Place() end
 function Window:SetMenuArtOverlap(k) self.MenuArt.Sink = math.clamp(tonumber(k) or 0.15, 0, 0.8) self.MenuArt.Place() end
 function Window:SetMenuArtOpacity(k) self.MenuArt.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.MenuArt.Place() end
+
+----------------------------------------------------------------------
+-- Customization: theme, glass, roundness, border, background, sidebar, text size, music, cursor
+----------------------------------------------------------------------
+local TEXT_CLASSES = { TextLabel = true, TextButton = true, TextBox = true }
+local function hex(c) return c:ToHex() end
+
+-- swaps the surface palette: every color that matches the old palette is moved to the new one
+function Window:SetTheme(name)
+    local th
+    for _, t in ipairs(Library.Themes) do if t.Name == name then th = t end end
+    if not th then return end
+    local map = {}
+    for _, k in ipairs(THEME_KEYS) do map[hex(Theme[k])] = th[k] end
+    for _, k in ipairs(THEME_KEYS) do Theme[k] = th[k] end
+    self.ThemeName = th.Name
+    local n = 0
+    local function swap(o, prop)
+        local c = map[hex(o[prop])]
+        if c then o[prop] = c end
+    end
+    task.spawn(function()
+        for _, d in ipairs(self.Gui:GetDescendants()) do
+            if d:IsA("GuiObject") then
+                swap(d, "BackgroundColor3")
+                if TEXT_CLASSES[d.ClassName] then
+                    swap(d, "TextColor3")
+                    if d:IsA("TextBox") then swap(d, "PlaceholderColor3") end
+                elseif d:IsA("ImageLabel") or d:IsA("ImageButton") then
+                    swap(d, "ImageColor3")
+                elseif d:IsA("ScrollingFrame") then
+                    swap(d, "ScrollBarImageColor3")
+                end
+            elseif d:IsA("UIStroke") then
+                swap(d, "Color")
+            end
+            n += 1
+            if n % 400 == 0 then task.wait() end
+        end
+        self:SetOpacity(self.Opacity or 1)
+    end)
+end
+
+-- window glass: 1 = solid, lower lets the game show through the background, sidebar and cards
+function Window:SetOpacity(k)
+    k = math.clamp(tonumber(k) or 1, 0.2, 1)
+    self.Opacity = k
+    local t = 1 - k
+    self.Canvas.BackgroundTransparency = t
+    self._side.BackgroundTransparency = t
+    local card = hex(Theme.Card)
+    for _, d in ipairs(self.Pages:GetDescendants()) do
+        if d:IsA("Frame") and (d:GetAttribute("Glass") or (hex(d.BackgroundColor3) == card and d.BackgroundTransparency < 0.5)) then
+            d:SetAttribute("Glass", true)
+            d.BackgroundTransparency = t * 0.7
+        end
+    end
+end
+
+-- 0 = square corners, 1 = as designed, 2 = extra round
+function Window:SetRoundness(k)
+    Library._Round = math.clamp(tonumber(k) or 1, 0, 2.5)
+    for _, d in ipairs(self.Gui:GetDescendants()) do
+        local r = d:IsA("UICorner") and d:GetAttribute("R0")
+        if r then d.CornerRadius = UDim.new(0, r * Library._Round) end
+    end
+end
+
+function Window:SetTextScale(k)
+    Library._TextScale = math.clamp(tonumber(k) or 1, 0.8, 1.25)
+    for _, d in ipairs(self.Gui:GetDescendants()) do
+        local base = TEXT_CLASSES[d.ClassName] and d:GetAttribute("TS0")
+        if base then d.TextSize = math.floor(base * Library._TextScale + 0.5) end
+    end
+end
+
+-- animated accent border around the window
+function Window:SetBorderGlow(on)
+    self.BorderGlow = on and true or false
+    local st = self._canvasStroke
+    if self._borderGrad then self._borderGrad:Destroy() self._borderGrad = nil end
+    if self._borderConn then self._borderConn:Disconnect() self._borderConn = nil end
+    if not self.BorderGlow then
+        st.Color, st.Transparency, st.Thickness = WHITE, 0.9, 1
+        return
+    end
+    st.Color, st.Transparency, st.Thickness = WHITE, 0.1, 1.5
+    local g = new("UIGradient", { Parent = st })
+    local function paint() g.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Theme.Accent), ColorSequenceKeypoint.new(0.5, accent2()), ColorSequenceKeypoint.new(1, Theme.Accent) }) end
+    paint()
+    self._borderGrad = g
+    local acc = 0
+    self._borderConn = connect(RunService.RenderStepped, function(dt)
+        if not self.Open then return end
+        g.Rotation = (g.Rotation + dt * 60 * Library._AnimSpeed) % 360
+        acc += dt
+        if acc > 0.25 then acc = 0 paint() end
+    end)
+end
+
+-- a picture behind the window content: an Art slot name, an asset id / url, or "Off"
+function Window:SetWindowBackground(src)
+    self.WindowBackground = src
+    self._bgToken = (self._bgToken or 0) + 1
+    local my = self._bgToken
+    local img = self._bgImage
+    if not src or src == "" or src == "Off" then img.Visible = false return end
+    local entry
+    for _, e in ipairs(Library.Art) do if e.Name == src then entry = e end end
+    entry = entry or { Image = src }
+    task.spawn(function()
+        local id = Library:_ArtAsset(entry, "Art")
+        if my ~= self._bgToken then return end
+        if not id then img.Visible = false return end
+        img.Image = id
+        -- tall art stands on the right like a character, anything else fills the window
+        if entry.Ratio and entry.Ratio < 1 then
+            self._bgRatio.Parent = img
+            img.ScaleType = Enum.ScaleType.Fit
+            img.Size = UDim2.fromScale(5, 1)
+        else
+            self._bgRatio.Parent = nil
+            img.ScaleType = Enum.ScaleType.Crop
+            img.Size = UDim2.fromScale(1, 1)
+        end
+        img.Visible = true
+    end)
+end
+function Window:SetWindowBackgroundVisibility(k)
+    self._bgImage.ImageTransparency = 1 - math.clamp(tonumber(k) or 0.25, 0, 1)
+end
+
+-- sidebar on the "Left" (default) or "Right"
+function Window:SetSidebarSide(side)
+    local right = side == "Right"
+    self.SidebarSide = right and "Right" or "Left"
+    self._side.AnchorPoint = Vector2.new(right and 1 or 0, 0)
+    self._side.Position = UDim2.fromScale(right and 1 or 0, 0)
+    self._sideLine.AnchorPoint = Vector2.new(right and 0 or 1, 0)
+    self._sideLine.Position = UDim2.fromScale(right and 0 or 1, 0)
+    self._head.Position = UDim2.fromOffset(right and 0 or self.SideW, 0)
+    self.Pages.Position = UDim2.fromOffset(right and 0 or self.SideW, HEAD_H)
+end
+
+-- sidebar width in px (default 196); the header and pages take the rest
+function Window:SetSidebarWidth(px)
+    local w = math.clamp(math.floor(tonumber(px) or SIDE_W), 150, 320)
+    self.SideW = w
+    self._side.Size = UDim2.new(0, w, 1, 0)
+    self._head.Size = UDim2.new(1, -w, 0, HEAD_H)
+    self.Pages.Size = UDim2.new(1, -w, 1, -HEAD_H)
+    self:SetSidebarSide(self.SidebarSide)
+    task.defer(function()
+        for _, t in ipairs(self.Tabs) do for _, sec in ipairs(t.Sections) do sec.Sync() end end
+        self:_MovePill(false)
+    end)
+end
+
+-- second gradient color (logo, primary buttons, bars); nil goes back to a shade of the accent
+function Library:SetAccent2(c)
+    self._Accent2 = typeof(c) == "Color3" and c or nil
+    self:SetAccent(Theme.Accent)
+end
+
+function Library:SetAnimationSpeed(k) self._AnimSpeed = math.clamp(tonumber(k) or 1, 0.3, 3) end
+
+function Window:SetEffectColor(c) self.Effects.SetColor(c) end
+function Window:SetEffectsAlways(b) self.Effects.SetAlways(b) end
+function Window:SetCustomCursor(on)
+    self._cursorOn = on and true or false
+    if not self._cursorOn then UIS.MouseIconEnabled = true end
+end
+
+-- Menu music: tracks from the repo's Music/ folder (mp3/ogg), synced like the art. Plays while the menu is open.
+function Window:_SetupMusic()
+    local M = { Name = "Off", Volume = 0.3, List = {}, Current = nil }
+    self.Music = M
+    local function names()
+        local t = { "Off", "Random" }
+        for _, f in ipairs(M.List) do table.insert(t, (f:gsub("%.%w+$", ""))) end
+        return t
+    end
+    M.Names = names
+    local snd
+    local token = 0
+    local function stop()
+        if snd then
+            local s0 = snd
+            snd = nil
+            tween(s0, { Volume = 0 }, 0.5)
+            task.delay(0.55, function() s0:Destroy() end)
+        end
+    end
+    local function play()
+        token += 1
+        local my = token
+        stop()
+        local file
+        if M.Name == "Random" and #M.List > 0 then
+            local pool = {}
+            for _, f in ipairs(M.List) do if f ~= M.Current or #M.List == 1 then table.insert(pool, f) end end
+            file = pool[rnd:NextInteger(1, #pool)]
+        else
+            for _, f in ipairs(M.List) do if f:gsub("%.%w+$", "") == M.Name then file = f end end
+        end
+        M.Current = file
+        if not file or not self.Open then return end
+        task.spawn(function()
+            local ca = getcustomasset or getsynasset
+            local path = ca and Remote.fetch("Music", file, function(b) return type(b) == "string" and #b > 1000 end)
+            if my ~= token or not path or not self.Open then return end
+            local ok, id = pcall(ca, path)
+            if not ok or not id then return end
+            snd = new("Sound", { SoundId = id, Looped = true, Volume = 0, Parent = self.Gui })
+            snd:Play()
+            tween(snd, { Volume = M.Volume }, 1)
+        end)
+    end
+    function M.Set(name) M.Name = tostring(name) play() end
+    function M.SetVolume(v)
+        M.Volume = math.clamp(tonumber(v) or 0.3, 0, 1)
+        if snd then snd.Volume = M.Volume end
+    end
+    function M.OnToggle(open) if open then play() else token += 1 stop() end end
+    task.spawn(function()
+        local remote = Remote.list("Music")
+        if not remote then return end
+        for f in pairs(remote) do
+            local low = f:lower()
+            if low:find("%.mp3$") or low:find("%.ogg$") then table.insert(M.List, f) end
+        end
+        table.sort(M.List)
+        local dd = self.Prefs and self.Prefs["Menu Music"]
+        if dd then dd.Refresh(names(), true) end
+        if M.Name ~= "Off" then play() end
+    end)
+end
 
 function Window:SetBlur(b)
     self.BlurEnabled = b and true or false
@@ -4053,21 +4411,33 @@ function Window:SelectTab(tab)
     if self.CurrentTab == tab then return end
     self:_ClosePopup()
     local old = self.CurrentTab
+    -- tab animation: "Slide Up" (default), "Slide Side", "Fade" or "None"
+    local anim = self.TabAnim or "Slide Up"
+    local outPos = anim == "Slide Up" and UDim2.fromOffset(0, -8) or anim == "Slide Side" and UDim2.fromOffset(-24, 0) or UDim2.fromOffset(0, 0)
+    local inPos = anim == "Slide Up" and UDim2.fromOffset(0, 14) or anim == "Slide Side" and UDim2.fromOffset(24, 0) or UDim2.fromOffset(0, 0)
     if old then
         old._setSelected(false)
         local oh = old.Page
-        tween(oh, { GroupTransparency = 1, Position = UDim2.fromOffset(0, -8) }, 0.15)
-        task.delay(0.15, function() if self.CurrentTab ~= old then oh.Visible = false end end)
+        if anim == "None" then
+            oh.Visible = false
+        else
+            tween(oh, { GroupTransparency = 1, Position = outPos }, 0.15)
+            task.delay(dly(0.15), function() if self.CurrentTab ~= old then oh.Visible = false end end)
+        end
     end
     self.CurrentTab = tab
     tab._setSelected(true)
     self:_MovePill(true)
     if self._onTabChanged then self._onTabChanged(tab) end
     local holder = tab.Page
-    holder.Position = UDim2.fromOffset(0, 14)
-    holder.GroupTransparency = 1
     holder.Visible = true
-    tween(holder, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.4)
+    if anim == "None" then
+        holder.Position, holder.GroupTransparency = UDim2.fromOffset(0, 0), 0
+    else
+        holder.Position = inPos
+        holder.GroupTransparency = 1
+        tween(holder, { GroupTransparency = 0, Position = UDim2.fromOffset(0, 0) }, 0.4)
+    end
     -- header title swap
     local t, st = self._pageTitle, self._pageSub
     t.Text = tab.Name
@@ -4331,6 +4701,9 @@ function Window:AddSettingsTab()
     local CL, CR = ctab:Column("left"), ctab:Column("right")
 
     local theme = CL:CreateSection({ Name = "Theme", Icon = "palette" })
+    local themeNames = {}
+    for _, t in ipairs(Library.Themes) do table.insert(themeNames, t.Name) end
+    pref(theme, "AddDropdown", { Name = "Theme", Options = themeNames, Default = "Midnight", Tooltip = "Colors of the window, cards and text", Callback = function(v) win:SetTheme(v) end })
     local accNames = {}
     for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
     local rainbow = false
@@ -4359,15 +4732,58 @@ function Window:AddSettingsTab()
             end
         end)
     end
-    pref(theme, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
+    local gradOn, gradPicker = false, nil
+    pref(theme, "AddToggle", { Name = "Gradient Accent", NoFastMenu = true, Tooltip = "Gradients (logo, main buttons, bars) go from the accent to your second color", Callback = function(v)
+        gradOn = v
+        Library:SetAccent2(v and gradPicker and gradPicker.Get() or nil)
+    end })
+    gradPicker = pref(theme, "AddColorPicker", { Name = "Gradient Color", Default = rgb(80, 200, 255), Callback = function(c) if gradOn then Library:SetAccent2(c) end end })
     pref(theme, "AddDropdown", { Name = "Font", Options = Library:FontNames(), Default = Library:GetFont(), Tooltip = "Menu font (all built-in Roblox fonts)", OptionFont = fontFamily, Callback = function(v) Library:SetFont(v) end })
-    pref(theme, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
-    pref(theme, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
 
-    local fx = CL:CreateSection({ Name = "Effects", Icon = "sparkles" })
+    local wsec = CL:CreateSection({ Name = "Window", Icon = "app-window" })
+    pref(wsec, "AddSlider", { Name = "Window Opacity", Min = 20, Max = 100, Default = 100, Suffix = "%", Tooltip = "Lower lets the game show through the menu (looks like glass with Background Blur)", Callback = function(v) win:SetOpacity(v / 100) end })
+    pref(wsec, "AddSlider", { Name = "Corner Roundness", Min = 0, Max = 250, Default = 100, Suffix = "%", Tooltip = "0% square, 100% as designed", Callback = function(v) win:SetRoundness(v / 100) end })
+    pref(wsec, "AddSlider", { Name = "Text Size", Min = 80, Max = 125, Default = 100, Suffix = "%", Callback = function(v) win:SetTextScale(v / 100) end })
+    pref(wsec, "AddDropdown", { Name = "Sidebar Side", Options = { "Left", "Right" }, Default = "Left", Callback = function(v) win:SetSidebarSide(v) end })
+    pref(wsec, "AddSlider", { Name = "Sidebar Width", Min = 150, Max = 320, Default = SIDE_W, Suffix = " px", Callback = function(v) win:SetSidebarWidth(v) end })
+    pref(wsec, "AddToggle", { Name = "Animated Border", NoFastMenu = true, Tooltip = "A glowing accent line running around the window", Callback = function(v) win:SetBorderGlow(v) end })
+    local bgNames = { "Off" }
+    for _, e in ipairs(Library.Art) do table.insert(bgNames, e.Name) end
+    local bgDrop, bgCustom
+    local function applyBg()
+        local custom = bgCustom and bgCustom.Get() or ""
+        win:SetWindowBackground(custom ~= "" and custom or (bgDrop and bgDrop.Get()) or "Off")
+    end
+    bgDrop = pref(wsec, "AddDropdown", { Name = "Window Background", Options = bgNames, Default = "Off", Tooltip = "A picture behind the menu content", Callback = function() applyBg() end })
+    bgCustom = pref(wsec, "AddTextbox", { Name = "Custom Background", Placeholder = "rbxassetid / image url", Tooltip = "Your own picture; empty uses the one above", Callback = function() applyBg() end })
+    pref(wsec, "AddSlider", { Name = "Background Visibility", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
+    pref(wsec, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
+    pref(wsec, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
+    if not IS_MOBILE then
+        pref(wsec, "AddToggle", { Name = "Custom Cursor", NoFastMenu = true, Tooltip = "An accent cursor with a trail while the menu is open", Callback = function(v) win:SetCustomCursor(v) end })
+    end
+    pref(wsec, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
+
+    local anim = CL:CreateSection({ Name = "Animation", Icon = "wand-sparkles" })
+    pref(anim, "AddSlider", { Name = "Animation Speed", Min = 30, Max = 300, Default = 100, Suffix = "%", Callback = function(v) Library:SetAnimationSpeed(v / 100) end })
+    pref(anim, "AddDropdown", { Name = "Open Style", Options = { "Pop", "Zoom", "Slide", "Fade", "TV" }, Default = "Pop", Tooltip = "How the menu appears", Callback = function(v) win.OpenStyle = v end })
+    pref(anim, "AddDropdown", { Name = "Tab Animation", Options = { "Slide Up", "Slide Side", "Fade", "None" }, Default = "Slide Up", Callback = function(v) win.TabAnim = v end })
+
+    local fx = CR:CreateSection({ Name = "Effects", Icon = "sparkles" })
     pref(fx, "AddDropdown", { Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
     pref(fx, "AddSlider", { Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
     pref(fx, "AddSlider", { Name = "Effect Speed", Min = 10, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectSpeed(v / 100) end })
+    local fxColorOn, fxPicker = false, nil
+    pref(fx, "AddToggle", { Name = "Custom Effect Color", NoFastMenu = true, Callback = function(v)
+        fxColorOn = v
+        win:SetEffectColor(v and fxPicker and fxPicker.Get() or nil)
+    end })
+    fxPicker = pref(fx, "AddColorPicker", { Name = "Effect Color", Default = rgb(255, 255, 255), Callback = function(c) if fxColorOn then win:SetEffectColor(c) end end })
+    pref(fx, "AddToggle", { Name = "Effects When Closed", NoFastMenu = true, Tooltip = "Keep the particles on screen while the menu is closed", Callback = function(v) win:SetEffectsAlways(v) end })
+
+    local mus = CR:CreateSection({ Name = "Music", Icon = "music" })
+    pref(mus, "AddDropdown", { Name = "Menu Music", Options = win.Music.Names(), Default = "Off", Tooltip = "Plays while the menu is open (tracks from the repo's Music folder)", Callback = function(v) win.Music.Set(v) end })
+    pref(mus, "AddSlider", { Name = "Music Volume", Min = 0, Max = 100, Default = 30, Suffix = "%", Callback = function(v) win.Music.SetVolume(v / 100) end })
 
     if #win.Art.List > 0 then
         local art = CR:CreateSection({ Name = "Corner Art", Icon = "image" })
