@@ -62,8 +62,8 @@ local Library = {
     -- art over the window (a character lying on its top edge): PNGs in the repo's MenuArt/ folder, synced like Art/
     MenuArt = {
         { Name = "Alya", Image = "alya.png", Ratio = 3.827 },
-        { Name = "Makima", Image = "makima.png", Ratio = 1.856 },
-        { Name = "Mai", Image = "mai.png", Ratio = 4.109 },
+        { Name = "Makima", Image = "makima.png", Ratio = 1.856, Scale = 0.6 },
+        { Name = "Mai", Image = "mai.png", Ratio = 4.347, Sink = 0.21 }, -- hair and skirt hang below the line she lies on
         { Name = "Pinky", Image = "pinky.png", Ratio = 2.813 },
     },
     LucideUrls = {
@@ -2578,8 +2578,22 @@ local function buildArt(win, cfg, kind)
     local defRatio = menu and 1 or 0.62
     local ratio = new("UIAspectRatioConstraint", { AspectRatio = defRatio, DominantAxis = menu and Enum.DominantAxis.Width or Enum.DominantAxis.Height })
     -- the aspect constraint shrinks the free side: corner art is sized by height, menu art (lying, wide) by width
-    local function box() return menu and UDim2.fromScale(A.Size, 5) or UDim2.fromScale(5, A.Size) end
-    local holder = new("CanvasGroup", {
+    local holder
+    -- a picture can carry its own Scale (multiplies Size) and, for menu art, Sink (added to the overlap slider)
+    local function box()
+        local k = A.Size * (A.Current and A.Current.Scale or 1)
+        return menu and UDim2.fromScale(k, 5) or UDim2.fromScale(5, k)
+    end
+    local function fit()
+        if menu then
+            local sink = math.clamp(A.Sink + (A.Current and A.Current.Sink or 0), 0, 0.95)
+            holder.AnchorPoint = Vector2.new(0.5, 1 - sink)
+        else
+            holder.AnchorPoint = Vector2.new(A.Side == "Left" and 0 or 1, 1)
+        end
+        holder.Size = box()
+    end
+    holder = new("CanvasGroup", {
         Parent = menu and win.Root or win.Gui, Size = box(),
         BackgroundTransparency = 1, GroupTransparency = 1, Visible = false, ZIndex = menu and 3 or 1,
     }, { ratio })
@@ -2601,6 +2615,7 @@ local function buildArt(win, cfg, kind)
         local entry = A.Current
         holder.Visible = entry ~= nil
         if not entry then return end
+        fit()
         ratio.AspectRatio = entry.Ratio or defRatio
         -- already loaded once: show it straight away (Random swaps pictures on every open)
         local cached = Library._artIds[key(entry)]
@@ -2620,13 +2635,8 @@ local function buildArt(win, cfg, kind)
         end)
     end
     function A.Place()
-        if menu then
-            holder.AnchorPoint = Vector2.new(0.5, 1 - A.Sink)
-        else
-            holder.AnchorPoint = Vector2.new(A.Side == "Left" and 0 or 1, 1)
-        end
+        fit()
         holder.Position = home()
-        holder.Size = box()
         if win.Open and A.Current then tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.25) end
     end
     function A.Set(name)
