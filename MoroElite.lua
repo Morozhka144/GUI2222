@@ -2936,11 +2936,12 @@ function Library:CreateWindow(cfg)
     local ambient = new("ImageLabel", { Parent = Canvas, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(1, -60, 0, 0), Size = UDim2.fromOffset(520, 340), Image = IMG_GLOW, ImageTransparency = 0.9 })
     trackAccent(ambient, "ImageColor3")
 
-    -- optional picture behind the window content (Customization > Window Background)
+    -- optional picture drawn over the window content, see-through and click-through (Customization > Window Background);
+    -- under the popups so dropdowns stay readable
     win._bgRatio = new("UIAspectRatioConstraint", { AspectRatio = 0.62, DominantAxis = Enum.DominantAxis.Height })
     win._bgImage = new("ImageLabel", {
         Parent = Canvas, AnchorPoint = Vector2.new(1, 1), Position = UDim2.fromScale(1, 1), Size = UDim2.fromScale(5, 1),
-        ImageTransparency = 0.75, Visible = false, ZIndex = 1,
+        ImageTransparency = 0.75, Visible = false, ZIndex = 45,
     }, { win._bgRatio })
 
     win.Effects = buildEffects(win)
@@ -3813,7 +3814,7 @@ function Window:SetBorderGlow(on)
     end)
 end
 
--- a picture behind the window content: an Art slot name, an asset id / url, or "Off"
+-- a see-through picture over the window content: an Art slot name, an asset id / url, or "Off"
 function Window:SetWindowBackground(src)
     self.WindowBackground = src
     self._bgToken = (self._bgToken or 0) + 1
@@ -4689,7 +4690,7 @@ function Window:AddSettingsTab()
 
     -- Keybind List
     local kl = self.KeybindList
-    local ksec = R:CreateSection({ Name = "Keybind List", Icon = "keyboard", Collapsible = true })
+    local ksec = L:CreateSection({ Name = "Keybind List", Icon = "keyboard", Collapsible = true })
     ksec:AddToggle({ Name = "Enable Keybind List", NoFastMenu = true, Callback = function(v) kl:SetVisible(v) end })
     ksec:AddSlider({ Name = "HUD Scale", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) kl:SetScale(v / 100) end })
     ksec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Keybind List Lock", Callback = function(v) kl:SetLocked(v) end })
@@ -4754,9 +4755,9 @@ function Window:AddSettingsTab()
         local custom = bgCustom and bgCustom.Get() or ""
         win:SetWindowBackground(custom ~= "" and custom or (bgDrop and bgDrop.Get()) or "Off")
     end
-    bgDrop = pref(wsec, "AddDropdown", { Name = "Window Background", Options = bgNames, Default = "Off", Tooltip = "A picture behind the menu content", Callback = function() applyBg() end })
-    bgCustom = pref(wsec, "AddTextbox", { Name = "Custom Background", Placeholder = "rbxassetid / image url", Tooltip = "Your own picture; empty uses the one above", Callback = function() applyBg() end })
-    pref(wsec, "AddSlider", { Name = "Background Visibility", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
+    bgDrop = pref(wsec, "AddDropdown", { Name = "Picture", Options = bgNames, Default = "Off", Tooltip = "A see-through picture over the menu (clicks go through it)", Callback = function() applyBg() end })
+    bgCustom = pref(wsec, "AddTextbox", { Name = "Link", Placeholder = "rbxassetid / image url", Tooltip = "Your own picture; empty uses the one above", Callback = function() applyBg() end })
+    pref(wsec, "AddSlider", { Name = "Picture Visibility", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
     pref(wsec, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
     pref(wsec, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
     if not IS_MOBILE then
