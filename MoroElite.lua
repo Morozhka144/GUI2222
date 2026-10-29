@@ -62,7 +62,7 @@ local Library = {
     -- art over the window (a character lying on its top edge): PNGs in the repo's MenuArt/ folder, synced like Art/
     MenuArt = {
         { Name = "Alya", Image = "alya.png", Ratio = 3.827 },
-        { Name = "Makima", Image = "makima.png", Ratio = 1.856, Scale = 0.6 },
+        { Name = "Makima", Image = "makima.png", Ratio = 1.856, Scale = 0.6, Sink = -0.15 },
         { Name = "Mai", Image = "mai.png", Ratio = 4.347, Sink = 0.21 }, -- hair and skirt hang below the line she lies on
         { Name = "Pinky", Image = "pinky.png", Ratio = 2.813 },
     },
