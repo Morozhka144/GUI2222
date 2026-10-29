@@ -72,7 +72,8 @@ local Library = {
     },
 }
 
-local FONT = "rbxasset://fonts/families/BuilderSans.json"
+local DEFAULT_FONT = "rbxasset://fonts/families/BuilderSans.json"
+local FONT = DEFAULT_FONT -- the menu font family; Library:SetFont changes it
 local IMG_GLOW = "rbxassetid://8992230677"
 
 local rgb = Color3.fromRGB
@@ -219,6 +220,64 @@ local function onAccent(fn)
 end
 local function contrast(c)
     return (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) > 0.62 and rgb(16, 16, 22) or WHITE
+end
+
+----------------------------------------------------------------------
+-- Fonts: every font family built into Roblox. Switching preloads only the chosen family (in the weights the
+-- menu uses) and then re-fonts the menu a few hundred objects per frame, so there is no hitch.
+----------------------------------------------------------------------
+function Library:GetFonts()
+    if self._fonts then return self._fonts end
+    local list, seen = {}, {}
+    for _, item in ipairs(Enum.Font:GetEnumItems()) do
+        local ok, f = pcall(Font.fromEnum, item)
+        local name = ok and f and f.Family:match("([^/]+)%.json$")
+        if name and not seen[f.Family] then
+            seen[f.Family] = true
+            table.insert(list, { Name = name, Family = f.Family })
+        end
+    end
+    table.sort(list, function(a, b) return a.Name:lower() < b.Name:lower() end)
+    self._fonts = list
+    return list
+end
+function Library:FontNames()
+    local t = {}
+    for _, f in ipairs(self:GetFonts()) do table.insert(t, f.Name) end
+    return t
+end
+local function fontFamily(name)
+    for _, f in ipairs(Library:GetFonts()) do if f.Name == name or f.Family == name then return f.Family end end
+end
+function Library:GetFont() return FONT:match("([^/]+)%.json$") end
+
+function Library:SetFont(name)
+    local family = fontFamily(name)
+    if not family or family == FONT then return end
+    FONT = family -- everything created from now on uses it
+    self._fontToken = (self._fontToken or 0) + 1
+    local token = self._fontToken
+    task.spawn(function()
+        -- load the new family first, so the menu never flashes in a fallback font
+        local probes = {}
+        for _, w in ipairs({ "Regular", "Medium", "SemiBold", "Bold", "Heavy" }) do
+            table.insert(probes, new("TextLabel", { Text = "Aa", FontFace = Font.new(family, Enum.FontWeight[w]) }))
+        end
+        pcall(function() S("ContentProvider"):PreloadAsync(probes) end)
+        for _, p in ipairs(probes) do p:Destroy() end
+        local win = self.Window
+        if token ~= self._fontToken or not win or not win.Gui then return end
+        local n = 0
+        for _, d in ipairs(win.Gui:GetDescendants()) do
+            if token ~= self._fontToken then return end
+            if (d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox")) and not d:GetAttribute("OwnFont") then
+                local ff = d.FontFace
+                d.FontFace = Font.new(family, ff.Weight, ff.Style)
+                n += 1
+                if n % 300 == 0 then task.wait() end
+            end
+        end
+    end)
 end
 
 function Library:SetAccent(c)
@@ -1889,6 +1948,14 @@ local function dropdownCore(self, cfg, multi)
     local single = nil
     local max = cfg.Max
     local popupApi
+    -- cfg.OptionFont(option) -> font family: each option (and the picked value) is drawn in its own font, like a
+    -- font picker. Those labels are marked OwnFont so switching the menu font leaves them alone.
+    local fontOf = cfg.OptionFont
+    local function optionFace(o, weight)
+        if not fontOf then return F(weight) end
+        return Font.new(fontOf(o) or FONT, Enum.FontWeight[weight])
+    end
+    if fontOf then valLbl:SetAttribute("OwnFont", true) end
 
     local function selectedArray()
         local out = {}
@@ -1904,6 +1971,7 @@ local function dropdownCore(self, cfg, multi)
         else
             valLbl.Text = single ~= nil and tostring(single) or (cfg.Placeholder or "Select...")
             valLbl.TextColor3 = single ~= nil and Theme.Text or Theme.Dim
+            if fontOf then valLbl.FontFace = optionFace(single, "Medium") end
         end
         if popupApi then popupApi.Render() end
     end
@@ -1952,6 +2020,7 @@ local function dropdownCore(self, cfg, multi)
             for i, o in ipairs(options) do
                 local b = new("TextButton", { Parent = list, LayoutOrder = i, Size = UDim2.new(1, 0, 0, ITEM), BackgroundColor3 = WHITE, BackgroundTransparency = 1, Text = "" }, { corner(6) })
                 local t = new("TextLabel", { Parent = b, Position = UDim2.fromOffset(multi and 32 or 10, 0), Size = UDim2.new(1, -44, 1, 0), Text = tostring(o), TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+                if fontOf then t:SetAttribute("OwnFont", true) end
                 local mark, markIcon, markText
                 if multi then
                     mark = new("Frame", { Parent = b, AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 9, 0.5, 0), Size = UDim2.fromOffset(16, 16), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 1 }, { corner(5) })
@@ -1975,7 +2044,7 @@ local function dropdownCore(self, cfg, multi)
                     local sel = isOn(o)
                     it.Btn.Visible = query == "" or tostring(o):lower():find(query, 1, true) ~= nil
                     tween(it.Text, { TextColor3 = sel and Theme.Text or Theme.Sub }, t)
-                    it.Text.FontFace = F(sel and "SemiBold" or "Medium")
+                    it.Text.FontFace = optionFace(o, sel and "SemiBold" or "Medium")
                     if multi then
                         tween(it.Mark, { BackgroundTransparency = sel and 0 or 1, BackgroundColor3 = Theme.Accent }, t)
                         tween(it.Stroke, { Transparency = sel and 1 or 0.75 }, t)
@@ -2767,6 +2836,8 @@ function Library:CreateWindow(cfg)
     win.NotifySound = cfg.NotifySound ~= false
     -- the shared menu preferences that matter before the Settings tab exists
     local prefs = Library:LoadPrefs()
+    -- the saved font goes in before anything is built, so nothing has to be re-fonted on start
+    FONT = fontFamily(prefs["Font"] or cfg.Font or "") or DEFAULT_FONT
     win.LoaderSound = cfg.LoaderSound ~= false
     if type(prefs["Startup Sound (Loader)"]) == "boolean" then win.LoaderSound = prefs["Startup Sound (Loader)"] end
     win.NotifySoundName = cfg.NotifySoundName or "Soft"
@@ -4289,6 +4360,7 @@ function Window:AddSettingsTab()
         end)
     end
     pref(theme, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
+    pref(theme, "AddDropdown", { Name = "Font", Options = Library:FontNames(), Default = Library:GetFont(), Tooltip = "Menu font (all built-in Roblox fonts)", OptionFont = fontFamily, Callback = function(v) Library:SetFont(v) end })
     pref(theme, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
     pref(theme, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
 
