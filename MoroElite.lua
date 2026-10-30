@@ -2367,15 +2367,95 @@ function Tab:SubTab(cfg)
     if not tab.Subs then
         tab.Subs = {}
         tab._cols.Visible = false
-        local bar = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, SUBBAR_H), BackgroundColor3 = Theme.Field, BackgroundTransparency = 0.35 }, { corner(10), stroke(WHITE, 0.94) })
+        local bar = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, SUBBAR_H), BackgroundColor3 = Theme.Field, BackgroundTransparency = 0.35, ClipsDescendants = true }, { corner(10), stroke(WHITE, 0.94) })
         local pill = new("Frame", { Parent = bar, Size = UDim2.fromOffset(0, SUBBAR_H - 6), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.8, Visible = false }, { corner(8) })
         trackAccent(pill, "BackgroundColor3")
         local pst = new("UIStroke", { Parent = pill, Color = Theme.Accent, Transparency = 0.55 })
         trackAccent(pst, "Color")
-        -- buttons share the bar's width evenly
-        local row = new("Frame", { Parent = bar, Position = UDim2.fromOffset(3, 3), Size = UDim2.new(1, -6, 1, -6), BackgroundTransparency = 1, ZIndex = 2 },
-            { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }) })
+        -- buttons share the bar's width evenly while every name fits; with more sub-tabs than that the
+        -- row turns into a sideways scroller (wheel, drag, arrows) with faded edges
+        local row = new("ScrollingFrame", {
+            Parent = bar, Position = UDim2.fromOffset(3, 3), Size = UDim2.new(1, -6, 1, -6), ScrollBarThickness = 0,
+            ScrollingDirection = Enum.ScrollingDirection.X, CanvasSize = UDim2.new(), ZIndex = 2,
+        }, { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }) })
         tab._subBar, tab._subPill, tab._subRow = bar, pill, row
+
+        local arrows = {}
+        for _, side in ipairs({ -1, 1 }) do
+            local holder = new("Frame", {
+                Parent = bar, AnchorPoint = Vector2.new(side < 0 and 0 or 1, 0), Position = UDim2.fromScale(side < 0 and 0 or 1, 0),
+                Size = UDim2.new(0, 46, 1, 0), BackgroundColor3 = Theme.Card, Visible = false, ZIndex = 5,
+            }, { new("UIGradient", { Rotation = side < 0 and 0 or 180, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.45, 0.1), NumberSequenceKeypoint.new(1, 1) }) }) })
+            local b = new("TextButton", { Parent = holder, AnchorPoint = Vector2.new(side < 0 and 0 or 1, 0.5), Position = UDim2.new(side < 0 and 0 or 1, side < 0 and 4 or -4, 0.5, 0), Size = UDim2.fromOffset(22, 22), BackgroundColor3 = WHITE, BackgroundTransparency = 1, Text = "", ZIndex = 6 }, { corner(6) })
+            local _, aic = makeIcon(b, side < 0 and "chevron-left" or "chevron-right", 15, Theme.Sub, side < 0 and "<" or ">")
+            if aic then aic.ZIndex = 6 aic.Parent.ZIndex = 6 end
+            b.MouseEnter:Connect(function() tween(b, { BackgroundTransparency = 0.9 }, 0.12) end)
+            b.MouseLeave:Connect(function() tween(b, { BackgroundTransparency = 1 }, 0.15) end)
+            b.MouseButton1Click:Connect(function()
+                local step = row.AbsoluteSize.X * 0.6
+                tween(row, { CanvasPosition = Vector2.new(math.max(0, row.CanvasPosition.X + side * step), 0) }, 0.3)
+            end)
+            arrows[side] = holder
+        end
+        local function updateArrows()
+            local canvas = row.AbsoluteCanvasSize.X
+            local view = row.AbsoluteWindowSize.X
+            local x = row.CanvasPosition.X
+            arrows[-1].Visible = tab._subScroll and x > 2 or false
+            arrows[1].Visible = tab._subScroll and x < canvas - view - 2 or false
+        end
+        -- the mouse wheel scrolls the row sideways
+        row.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseWheel and tab._subScroll then
+                local maxX = math.max(0, row.AbsoluteCanvasSize.X - row.AbsoluteWindowSize.X)
+                row.CanvasPosition = Vector2.new(math.clamp(row.CanvasPosition.X - input.Position.Z * 60, 0, maxX), 0)
+            end
+        end)
+
+        -- even split if the widest name fits into its share, otherwise every button takes its natural width
+        function tab._layoutSubs()
+            local subs = tab.Subs
+            local n = #subs
+            if n == 0 then return end
+            local sc = effScale()
+            local W = row.AbsoluteSize.X / sc
+            if W <= 0 then return end
+            local widest, total = 0, 0
+            for _, sb in ipairs(subs) do
+                local need = sb._label.TextBounds.X / sc + 16 + (sb._hasIcon and 20 or 0) + 8
+                sb._natural = need
+                widest = math.max(widest, need)
+                total += need + 2
+            end
+            local share = (W - 2 * (n - 1)) / n
+            tab._subScroll = widest > share
+            for _, sb in ipairs(subs) do
+                sb.Button.Size = UDim2.new(0, tab._subScroll and sb._natural or share, 1, 0)
+            end
+            row.CanvasSize = UDim2.fromOffset(tab._subScroll and total or 0, 0)
+            if not tab._subScroll then row.CanvasPosition = Vector2.zero end
+            task.defer(function()
+                updateArrows()
+                tab._placePill(false)
+            end)
+        end
+        -- keeps the selected button in view when the row scrolls
+        function tab._revealSub(sub)
+            if not tab._subScroll then return end
+            local sc = effScale()
+            local left = (sub.Button.AbsolutePosition.X - row.AbsolutePosition.X) / sc + row.CanvasPosition.X / sc
+            local w = sub.Button.AbsoluteSize.X / sc
+            local view = row.AbsoluteWindowSize.X / sc
+            local x = row.CanvasPosition.X / sc
+            local target = x
+            if left - 40 < x then target = left - 40 elseif left + w + 40 > x + view then target = left + w + 40 - view end
+            local maxX = math.max(0, row.AbsoluteCanvasSize.X / sc - view)
+            tween(row, { CanvasPosition = Vector2.new(math.clamp(target, 0, maxX) * sc, 0) }, 0.3)
+        end
+        row:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+            updateArrows()
+            tab._placePill(false)
+        end)
         -- the pill follows the selected button
         function tab._placePill(animate)
             local sub = tab.CurrentSub
@@ -2385,7 +2465,7 @@ function Tab:SubTab(cfg)
             local goal = { Position = UDim2.fromOffset(x, 3), Size = UDim2.fromOffset(sub.Button.AbsoluteSize.X / sc, SUBBAR_H - 6) }
             if animate and pill.Visible then tween(pill, goal, 0.35) else pill.Position, pill.Size, pill.Visible = goal.Position, goal.Size, true end
         end
-        row:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() tab._placePill(false) end)
+        row:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() tab._layoutSubs() end)
     end
 
     local sub = setmetatable({ Window = win, Parent = tab, Name = cfg.Name or "Sub", Icon = cfg.Icon or tab.Icon, Sections = tab.Sections, Scroll = tab.Scroll }, Tab)
@@ -2409,7 +2489,9 @@ function Tab:SubTab(cfg)
         if ic then ic.ZIndex = 3 end
     end
     local lbl = new("TextLabel", { Parent = btn, LayoutOrder = 2, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = sub.Name, TextSize = 13, TextColor3 = Theme.Sub, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
-    sub.Button = btn
+    sub.Button, sub._label, sub._hasIcon = btn, lbl, cfg.Icon ~= nil
+    -- names change width with the font, the text size and the selected weight
+    lbl:GetPropertyChangedSignal("TextBounds"):Connect(function() if tab._layoutSubs then tab._layoutSubs() end end)
     function sub._setSelected(on)
         tween(lbl, { TextColor3 = on and Theme.Text or Theme.Sub }, 0.2)
         lbl.FontFace = F(on and "SemiBold" or "Medium")
@@ -2423,9 +2505,8 @@ function Tab:SubTab(cfg)
     function sub.Select() win:SelectTab(tab) tab:SelectSub(sub) end
 
     table.insert(tab.Subs, sub)
-    local n = #tab.Subs
-    for _, s in ipairs(tab.Subs) do s.Button.Size = UDim2.new(1 / n, -2 * (n - 1) / n, 1, 0) end
-    if not tab.CurrentSub then tab:SelectSub(sub, true) else task.defer(function() tab._placePill(false) end) end
+    tab._layoutSubs()
+    if not tab.CurrentSub then tab:SelectSub(sub, true) end
     return sub
 end
 
@@ -2448,6 +2529,7 @@ function Tab:SelectSub(sub, instant)
     end
     task.defer(function()
         tab._placePill(not instant)
+        tab._revealSub(sub)
         for _, s in ipairs(tab.Sections) do s.Sync() end
     end)
 end
@@ -4570,7 +4652,7 @@ function Window:SelectTab(tab)
     tween(st, { TextTransparency = 0 }, 0.45)
     task.defer(function()
         for _, s in ipairs(tab.Sections) do s.Sync() end
-        if tab._placePill then tab._placePill(false) end
+        if tab._layoutSubs then tab._layoutSubs() end
     end)
 end
 
