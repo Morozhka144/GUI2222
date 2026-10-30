@@ -2359,6 +2359,7 @@ function Tab:Select() self.Window:SelectTab(self) end
 --   esp:Column("left"):CreateSection({ ... })   -- or esp:CreateSection
 -- Once a tab has sub-tabs its own columns are hidden: put everything into the sub-tabs.
 local SUBBAR_H = 34
+local SUBBAR_TOP = 14 + SUBBAR_H + 6 -- the page scrolls below the bar, which stays put
 function Tab:SubTab(cfg)
     if type(cfg) == "string" then cfg = { Name = cfg } end
     cfg = cfg or {}
@@ -2367,7 +2368,10 @@ function Tab:SubTab(cfg)
     if not tab.Subs then
         tab.Subs = {}
         tab._cols.Visible = false
-        local bar = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, SUBBAR_H), BackgroundColor3 = Theme.Field, BackgroundTransparency = 0.35, ClipsDescendants = true }, { corner(10), stroke(WHITE, 0.94) })
+        -- the bar lives on the page itself (not in the scrolling part), so it never scrolls away
+        tab.Scroll.Position = UDim2.fromOffset(0, SUBBAR_TOP)
+        tab.Scroll.Size = UDim2.new(1, 0, 1, -SUBBAR_TOP)
+        local bar = new("Frame", { Parent = tab.Page, ZIndex = 3, Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, SUBBAR_H), BackgroundColor3 = Theme.Field, BackgroundTransparency = 0.35, ClipsDescendants = true }, { corner(10), stroke(WHITE, 0.94) })
         local pill = new("Frame", { Parent = bar, Size = UDim2.fromOffset(0, SUBBAR_H - 6), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.8, Visible = false }, { corner(8) })
         trackAccent(pill, "BackgroundColor3")
         local pst = new("UIStroke", { Parent = pill, Color = Theme.Accent, Transparency = 0.55 })
@@ -2471,7 +2475,7 @@ function Tab:SubTab(cfg)
     local sub = setmetatable({ Window = win, Parent = tab, Name = cfg.Name or "Sub", Icon = cfg.Icon or tab.Icon, Sections = tab.Sections, Scroll = tab.Scroll }, Tab)
     sub.Path = tab.Name .. "  ›  " .. sub.Name
     -- its own columns, placed under the bar
-    local cols = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 14 + SUBBAR_H + 14), Size = UDim2.new(1, -32, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false }, { pad(0, 0, 0, 16) })
+    local cols = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 8), Size = UDim2.new(1, -32, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false }, { pad(0, 0, 0, 16) })
     local left = new("Frame", { Parent = cols, Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { vlist(12) })
     local right = new("Frame", { Parent = cols, Position = UDim2.new(0.5, 6, 0, 0), Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { vlist(12) })
     sub._cols = cols
@@ -2524,8 +2528,8 @@ function Tab:SelectSub(sub, instant)
     if not instant then
         -- slide in from the side the new sub-tab is on
         local dir = (old and table.find(tab.Subs, sub) < table.find(tab.Subs, old)) and -1 or 1
-        cols.Position = UDim2.fromOffset(16 + 24 * dir, 14 + SUBBAR_H + 14)
-        tween(cols, { Position = UDim2.fromOffset(16, 14 + SUBBAR_H + 14) }, 0.35)
+        cols.Position = UDim2.fromOffset(16 + 24 * dir, 8)
+        tween(cols, { Position = UDim2.fromOffset(16, 8) }, 0.35)
     end
     task.defer(function()
         tab._placePill(not instant)
