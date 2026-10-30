@@ -1505,6 +1505,13 @@ end
 local Window, Tab, Column, Section = {}, {}, {}, {}
 Window.__index, Tab.__index, Column.__index, Section.__index = Window, Tab, Column, Section
 
+-- tab or sub-tab currently on screen (a sub-tab only when its tab is open and it is the selected one)
+local function pageShown(tab)
+    local win = tab.Window
+    if tab.Parent then return win.CurrentTab == tab.Parent and tab.Parent.CurrentSub == tab end
+    return win.CurrentTab == tab
+end
+
 local function nextOrder(sec) sec._n = (sec._n or 0) + 1 return sec._n end
 
 -- flat row with hover highlight; returns row, name label
@@ -2265,7 +2272,7 @@ function Section:AddStat(cfg)
         task.spawn(function()
             while row.Parent do
                 -- only while its page is on screen; values are re-read the moment it shows up again
-                if tab.Window.Open and tab.Window.CurrentTab == tab then refresh() end
+                if tab.Window.Open and pageShown(tab) then refresh() end
                 task.wait(cfg.Interval or 1)
             end
         end)
@@ -2290,7 +2297,7 @@ function Section:AddCharacterPreview(cfg)
     trackAccent(floorGlow, "ImageColor3")
     local tab = self.Tab
     local view = characterView(stage, {
-        Player = cfg.Player, ZIndex = 2, Active = function() return tab.Window.CurrentTab == tab and tab.Window.Open end,
+        Player = cfg.Player, ZIndex = 2, Active = function() return pageShown(tab) and tab.Window.Open end,
         OnFail = function()
             new("TextLabel", { Parent = stage, Size = UDim2.fromScale(1, 1), Text = "Character not loaded", TextColor3 = Theme.Dim, TextSize = 13, ZIndex = 3 })
         end,
@@ -2346,6 +2353,107 @@ function Tab:CreateSection(cfg)
     return col:CreateSection(cfg)
 end
 function Tab:Select() self.Window:SelectTab(self) end
+
+-- Sub-tabs: a row of pills at the top of the page, each with its own two columns.
+--   local esp = Visuals:SubTab({ Name = "ESP", Icon = "eye" })
+--   esp:Column("left"):CreateSection({ ... })   -- or esp:CreateSection
+-- Once a tab has sub-tabs its own columns are hidden: put everything into the sub-tabs.
+local SUBBAR_H = 34
+function Tab:SubTab(cfg)
+    if type(cfg) == "string" then cfg = { Name = cfg } end
+    cfg = cfg or {}
+    local tab, win = self, self.Window
+    if tab.Parent then return tab.Parent:SubTab(cfg) end
+    if not tab.Subs then
+        tab.Subs = {}
+        tab._cols.Visible = false
+        local bar = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, SUBBAR_H), BackgroundColor3 = Theme.Field, BackgroundTransparency = 0.35 }, { corner(10), stroke(WHITE, 0.94) })
+        local pill = new("Frame", { Parent = bar, Size = UDim2.fromOffset(0, SUBBAR_H - 6), Position = UDim2.fromOffset(3, 3), BackgroundColor3 = Theme.Accent, BackgroundTransparency = 0.8, Visible = false }, { corner(8) })
+        trackAccent(pill, "BackgroundColor3")
+        local pst = new("UIStroke", { Parent = pill, Color = Theme.Accent, Transparency = 0.55 })
+        trackAccent(pst, "Color")
+        -- buttons share the bar's width evenly
+        local row = new("Frame", { Parent = bar, Position = UDim2.fromOffset(3, 3), Size = UDim2.new(1, -6, 1, -6), BackgroundTransparency = 1, ZIndex = 2 },
+            { new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }) })
+        tab._subBar, tab._subPill, tab._subRow = bar, pill, row
+        -- the pill follows the selected button
+        function tab._placePill(animate)
+            local sub = tab.CurrentSub
+            if not sub then return end
+            local sc = effScale()
+            local x = (sub.Button.AbsolutePosition.X - bar.AbsolutePosition.X) / sc
+            local goal = { Position = UDim2.fromOffset(x, 3), Size = UDim2.fromOffset(sub.Button.AbsoluteSize.X / sc, SUBBAR_H - 6) }
+            if animate and pill.Visible then tween(pill, goal, 0.35) else pill.Position, pill.Size, pill.Visible = goal.Position, goal.Size, true end
+        end
+        row:GetPropertyChangedSignal("AbsoluteSize"):Connect(function() tab._placePill(false) end)
+    end
+
+    local sub = setmetatable({ Window = win, Parent = tab, Name = cfg.Name or "Sub", Icon = cfg.Icon or tab.Icon, Sections = tab.Sections, Scroll = tab.Scroll }, Tab)
+    sub.Path = tab.Name .. "  ›  " .. sub.Name
+    -- its own columns, placed under the bar
+    local cols = new("Frame", { Parent = tab.Scroll, Position = UDim2.fromOffset(16, 14 + SUBBAR_H + 14), Size = UDim2.new(1, -32, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false }, { pad(0, 0, 0, 16) })
+    local left = new("Frame", { Parent = cols, Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { vlist(12) })
+    local right = new("Frame", { Parent = cols, Position = UDim2.new(0.5, 6, 0, 0), Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { vlist(12) })
+    sub._cols = cols
+    sub.LeftCol = setmetatable({ Tab = sub, Frame = left }, Column)
+    sub.RightCol = setmetatable({ Tab = sub, Frame = right }, Column)
+
+    local btn = new("TextButton", { Parent = tab._subRow, LayoutOrder = #tab.Subs + 1, Size = UDim2.new(0, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 3 }, {
+        pad(8, 0, 8, 0), hlist(6, Enum.HorizontalAlignment.Center),
+    })
+    local ic, icText
+    if cfg.Icon then
+        local h
+        h, ic, icText = makeIcon(btn, cfg.Icon, 14, Theme.Dim, nil)
+        h.LayoutOrder, h.ZIndex = 1, 3
+        if ic then ic.ZIndex = 3 end
+    end
+    local lbl = new("TextLabel", { Parent = btn, LayoutOrder = 2, Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = sub.Name, TextSize = 13, TextColor3 = Theme.Sub, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
+    sub.Button = btn
+    function sub._setSelected(on)
+        tween(lbl, { TextColor3 = on and Theme.Text or Theme.Sub }, 0.2)
+        lbl.FontFace = F(on and "SemiBold" or "Medium")
+        if ic then tintIcon(ic, icText, on and Theme.Accent or Theme.Dim, 0.2) end
+    end
+    onAccent(function() if ic and tab.CurrentSub == sub then tintIcon(ic, icText, Theme.Accent, 0) end end)
+    btn.MouseEnter:Connect(function() if tab.CurrentSub ~= sub then tween(lbl, { TextColor3 = Theme.Text }, 0.15) end end)
+    btn.MouseLeave:Connect(function() if tab.CurrentSub ~= sub then tween(lbl, { TextColor3 = Theme.Sub }, 0.2) end end)
+    btn.MouseButton1Click:Connect(function() tab:SelectSub(sub) end)
+    -- Select() on a sub-tab opens its tab and switches to it (search results use this)
+    function sub.Select() win:SelectTab(tab) tab:SelectSub(sub) end
+
+    table.insert(tab.Subs, sub)
+    local n = #tab.Subs
+    for _, s in ipairs(tab.Subs) do s.Button.Size = UDim2.new(1 / n, -2 * (n - 1) / n, 1, 0) end
+    if not tab.CurrentSub then tab:SelectSub(sub, true) else task.defer(function() tab._placePill(false) end) end
+    return sub
+end
+
+function Tab:SelectSub(sub, instant)
+    local tab = self
+    if tab.CurrentSub == sub then return end
+    local old = tab.CurrentSub
+    tab.CurrentSub = sub
+    self.Window:_ClosePopup()
+    if old then old._setSelected(false) old._cols.Visible = false end
+    sub._setSelected(true)
+    local cols = sub._cols
+    cols.Visible = true
+    tab.Scroll.CanvasPosition = Vector2.zero
+    if not instant then
+        -- slide in from the side the new sub-tab is on
+        local dir = (old and table.find(tab.Subs, sub) < table.find(tab.Subs, old)) and -1 or 1
+        cols.Position = UDim2.fromOffset(16 + 24 * dir, 14 + SUBBAR_H + 14)
+        tween(cols, { Position = UDim2.fromOffset(16, 14 + SUBBAR_H + 14) }, 0.35)
+    end
+    task.defer(function()
+        tab._placePill(not instant)
+        for _, s in ipairs(tab.Sections) do s.Sync() end
+    end)
+end
+function Tab:GetSubTab(name)
+    for _, s in ipairs(self.Subs or {}) do if s.Name == name then return s end end
+end
 
 ----------------------------------------------------------------------
 -- Background effects: particles behind the window content (or the whole screen)
@@ -3391,7 +3499,7 @@ function Library:CreateWindow(cfg)
                 ic.ZIndex = 63
                 ic.Parent.ZIndex = 63
                 new("TextLabel", { Parent = b, Position = UDim2.fromOffset(36, 5), Size = UDim2.new(1, -44, 0, 17), Text = e.Name, TextSize = 13, W = "SemiBold", TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 63 })
-                new("TextLabel", { Parent = b, Position = UDim2.fromOffset(36, 22), Size = UDim2.new(1, -44, 0, 14), Text = e.Tab.Name .. "  ›  " .. e.Section.Name, TextSize = 11, W = "Regular", TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 63 })
+                new("TextLabel", { Parent = b, Position = UDim2.fromOffset(36, 22), Size = UDim2.new(1, -44, 0, 14), Text = (e.Tab.Path or e.Tab.Name) .. "  ›  " .. e.Section.Name, TextSize = 11, W = "Regular", TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 63 })
                 b.MouseEnter:Connect(function() tween(b, { BackgroundTransparency = 0.95 }, 0.12) tintIcon(ic, it, Theme.Accent) end)
                 b.MouseLeave:Connect(function() tween(b, { BackgroundTransparency = 1 }, 0.15) tintIcon(ic, it, Theme.Dim) end)
                 b.MouseButton1Click:Connect(function() jump(e) end)
@@ -4384,7 +4492,7 @@ function Window:CreateTab(cfg)
     page:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
         if self._popup then self:_ClosePopup() end
     end)
-    tab.Page, tab.Scroll, tab.Button = holder, page, btn
+    tab.Page, tab.Scroll, tab.Button, tab._cols = holder, page, btn, cols
     tab.LeftCol = setmetatable({ Tab = tab, Frame = left }, Column)
     tab.RightCol = setmetatable({ Tab = tab, Frame = right }, Column)
 
@@ -4460,7 +4568,10 @@ function Window:SelectTab(tab)
     t.Position = UDim2.fromOffset(22, 16)
     tween(t, { TextTransparency = 0, Position = UDim2.fromOffset(22, 10) }, 0.35)
     tween(st, { TextTransparency = 0 }, 0.45)
-    task.defer(function() for _, s in ipairs(tab.Sections) do s.Sync() end end)
+    task.defer(function()
+        for _, s in ipairs(tab.Sections) do s.Sync() end
+        if tab._placePill then tab._placePill(false) end
+    end)
 end
 
 ----------------------------------------------------------------------

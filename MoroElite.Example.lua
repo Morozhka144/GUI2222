@@ -32,11 +32,23 @@ Misc:AddButton({ Name = "Say hi", Icon = "sparkles", Primary = true, Callback = 
 end })
 Misc:AddButton({ Name = "Warn me", Callback = function() Window:Notify({ Title = "Careful", Text = "Entity incoming", Type = "warning" }) end })
 
-local preview = Visuals:Column("left"):CreateSection({ Name = "Preview", Icon = "scan-eye" })
+-- sub-tabs: a row at the top of the page, each with its own columns
+local espTab = Visuals:SubTab({ Name = "ESP", Icon = "eye" })
+local effTab = Visuals:SubTab({ Name = "Effects", Icon = "sparkles" })
+local skinTab = Visuals:SubTab({ Name = "Skin Changer", Icon = "shirt" })
+
+local esp = espTab:Column("left"):CreateSection({ Name = "ESP", Icon = "eye" })
+esp:AddToggle({ Name = "Doors ESP", Tooltip = "Highlights every door" })
+esp:AddToggle({ Name = "Item ESP", Tooltip = "Shows items through walls" })
+local preview = espTab:Column("right"):CreateSection({ Name = "Preview", Icon = "scan-eye" })
 preview:AddCharacterPreview({ Height = 260 })
-local esp = Visuals:Column("right"):CreateSection({ Name = "ESP", Icon = "eye" })
-esp:AddToggle({ Name = "Doors ESP" })
-esp:AddToggle({ Name = "Item ESP" })
+
+local light = effTab:Column("left"):CreateSection({ Name = "Lighting", Icon = "sun" })
+light:AddToggle({ Name = "Fullbright" })
+light:AddSlider({ Name = "Field of View", Min = 70, Max = 120, Default = 70 })
+
+local skin = skinTab:Column("left"):CreateSection({ Name = "Skins", Icon = "shirt" })
+skin:AddDropdown({ Name = "Knife Skin", Options = { "Default", "Gold", "Neon" }, Default = "Default" })
 
 -- the profile (click your card bottom-left) has universal Account / Session info;
 -- each script adds its own stats there
