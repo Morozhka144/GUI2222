@@ -4132,7 +4132,7 @@ function Window:_BuildProfileTab()
 
     local charSec = tab:Column("left"):CreateSection({ Name = "Character", Icon = "user-round", Collapsible = false })
     local preview = charSec:AddCharacterPreview({ Name = "Profile Preview", Height = 330 })
-    charSec:AddButton({ Name = "Refresh Model", Icon = "refresh-cw", NoFastMenu = true, Callback = function() preview.Refresh() end })
+    charSec:AddButton({ Name = "Refresh Model", Tooltip = "Rebuilds the 3D preview from your current character", Icon = "refresh-cw", NoFastMenu = true, Callback = function() preview.Refresh() end })
 
     -- Backpack: every Tool in the player's Backpack plus the one in hand, same names grouped with a count
     local bag = tab:Column("left"):CreateSection({ Name = "Backpack", Icon = "backpack", Collapsible = false })
@@ -4498,7 +4498,7 @@ function Window:AddConfigsTab()
     local share = R:CreateSection({ Name = "Share", Icon = "share-2", Collapsible = true })
     local selected, newName
 
-    local nameBox = sec:AddTextbox({ Name = "Config Name", Placeholder = "my config", NoConfig = true, Callback = function(t) newName = t end })
+    local nameBox = sec:AddTextbox({ Name = "Config Name", Tooltip = "Name for a new config", Placeholder = "my config", NoConfig = true, Callback = function(t) newName = t end })
     local dropdown
     local autoLbl = more:AddLabel("Auto-Load: None")
     local function refreshAuto()
@@ -4515,7 +4515,7 @@ function Window:AddConfigsTab()
         if not selected then self:Notify({ Title = "Configs", Text = "Select a config first", Type = "warning" }) return false end
         return true
     end
-    sec:AddButton({ Name = "Create Config", Icon = "plus", Primary = true, NoFastMenu = true, Callback = function()
+    sec:AddButton({ Name = "Create Config", Tooltip = "Saves all current settings as a new config for this game", Icon = "plus", Primary = true, NoFastMenu = true, Callback = function()
         local n = sanitize(newName or nameBox.Get())
         if n == "" then self:Notify({ Title = "Configs", Text = "Enter a config name", Type = "warning" }) return end
         local ok, err = Library:SaveConfig(n)
@@ -4526,13 +4526,13 @@ function Window:AddConfigsTab()
             self:Notify({ Title = "Configs", Text = tostring(err), Type = "error" })
         end
     end })
-    dropdown = sec:AddDropdown({ Name = "Select Config", Options = Library:GetConfigs(), NoConfig = true, Callback = function(v) selected = v end })
-    sec:AddButton({ Name = "Load", Icon = "download", NoFastMenu = true, Callback = function()
+    dropdown = sec:AddDropdown({ Name = "Select Config", Tooltip = "Pick a saved config to load, overwrite or delete", Options = Library:GetConfigs(), NoConfig = true, Callback = function(v) selected = v end })
+    sec:AddButton({ Name = "Load", Tooltip = "Applies the selected config", Icon = "download", NoFastMenu = true, Callback = function()
         if not need() then return end
         local ok, err = Library:LoadConfig(selected)
         self:Notify({ Title = "Configs", Text = ok and ("Loaded '" .. selected .. "'") or tostring(err), Type = ok and "success" or "error" })
     end })
-    sec:AddButton({ Name = "Delete", Icon = "trash-2", NoFastMenu = true, Callback = function()
+    sec:AddButton({ Name = "Delete", Tooltip = "Removes the selected config file", Icon = "trash-2", NoFastMenu = true, Callback = function()
         if not need() then return end
         local n = selected
         Library:DeleteConfig(n)
@@ -4541,25 +4541,25 @@ function Window:AddConfigsTab()
         self:Notify({ Title = "Configs", Text = "Deleted '" .. n .. "'", Type = "success" })
     end })
 
-    more:AddButton({ Name = "Overwrite", Icon = "save", NoFastMenu = true, Callback = function()
+    more:AddButton({ Name = "Overwrite", Tooltip = "Saves current settings into the selected config", Icon = "save", NoFastMenu = true, Callback = function()
         if not need() then return end
         local ok, err = Library:SaveConfig(selected)
         self:Notify({ Title = "Configs", Text = ok and ("Overwrote '" .. selected .. "'") or tostring(err), Type = ok and "success" or "error" })
     end })
-    more:AddButton({ Name = "Set Auto-Load", Icon = "rocket", NoFastMenu = true, Callback = function()
+    more:AddButton({ Name = "Set Auto-Load", Tooltip = "Loads the selected config automatically every time the script starts in this game", Icon = "rocket", NoFastMenu = true, Callback = function()
         if not need() then return end
         Library:SetAutoLoad(selected)
         refreshAuto()
         self:Notify({ Title = "Configs", Text = "Auto-load: " .. selected, Type = "success" })
     end })
-    more:AddButton({ Name = "Clear Auto-Load", Icon = "circle-off", NoFastMenu = true, Callback = function()
+    more:AddButton({ Name = "Clear Auto-Load", Tooltip = "Stops loading a config on start", Icon = "circle-off", NoFastMenu = true, Callback = function()
         Library:ClearAutoLoad()
         refreshAuto()
         self:Notify({ Title = "Configs", Text = "Auto-load cleared", Type = "info" })
     end })
-    more:AddButton({ Name = "Refresh List", Icon = "refresh-cw", NoFastMenu = true, Callback = function() refreshList(selected) end })
+    more:AddButton({ Name = "Refresh List", Tooltip = "Re-reads the config folder", Icon = "refresh-cw", NoFastMenu = true, Callback = function() refreshList(selected) end })
 
-    local importBox = share:AddTextbox({ Name = "Import String", Placeholder = "MLUMINA1:...", NoConfig = true })
+    local importBox = share:AddTextbox({ Name = "Import String", Tooltip = "Paste a config code someone shared with you", Placeholder = "MLUMINA1:...", NoConfig = true })
     share:AddButton({ Name = "Export to Clipboard", Icon = "copy", NoFastMenu = true, Tooltip = "Copies the current settings as a shareable string", Callback = function()
         local s = Library:ExportConfig()
         local sc = setclipboard or toclipboard
@@ -4630,10 +4630,10 @@ function Window:AddSettingsTab()
 
     -- Interface
     local iface = L:CreateSection({ Name = "Interface", Icon = "monitor" })
-    pref(iface, "AddDropdown", { Name = "UI Scale", Options = { "50%", "75%", "100%", "125%", "150%" }, Default = (DEF_SCALE * 100) .. "%", Callback = function(v)
+    pref(iface, "AddDropdown", { Name = "UI Scale", Tooltip = "Size of the whole menu", Options = { "50%", "75%", "100%", "125%", "150%" }, Default = (DEF_SCALE * 100) .. "%", Callback = function(v)
         win:_SetUIScale((tonumber((tostring(v):gsub("%%", ""))) or 100) / 100)
     end })
-    ui.MenuBind = pref(iface, "AddKeybind", { Name = "Menu Toggle", Default = self.ToggleKey, NoBind = true, ChangedCallback = function(k)
+    ui.MenuBind = pref(iface, "AddKeybind", { Name = "Menu Toggle", Tooltip = "Key that opens and closes the menu", Default = self.ToggleKey, NoBind = true, ChangedCallback = function(k)
         if k then win.ToggleKey = k end
     end })
     pref(iface, "AddDropdown", { Name = "Open Control", Options = { "Bar", "Button", "Off" }, Default = win.OpenControl, Tooltip = "How to open the menu without a keyboard", Callback = function(v)
@@ -4641,14 +4641,14 @@ function Window:AddSettingsTab()
         win:SetOpenControl(v)
         win:ShowOpenGuide(2)
     end })
-    iface:AddButton({ Name = "Reset Window Size", Icon = "maximize-2", NoFastMenu = true, Callback = function() win:SetSize(DEF_W, DEF_H, true) end })
+    iface:AddButton({ Name = "Reset Window Size", Tooltip = "Puts the window back to its default size", Icon = "maximize-2", NoFastMenu = true, Callback = function() win:SetSize(DEF_W, DEF_H, true) end })
 
     -- Fast Menu
     local fm = self.FastMenu
     local fsec = L:CreateSection({ Name = "Fast Menu", Icon = "zap", Collapsible = true })
-    fsec:AddToggle({ Name = "Enable Fast Menu", NoFastMenu = true, Callback = function(v) fm:SetVisible(v) end })
-    local selFunc = fsec:AddMultiDropdown({ Name = "Select Functions", Options = Library._FastToggleOrder, NoConfig = true, Placeholder = "None", Callback = function(v) fm.SelToggles = v fm:Refresh() end })
-    local selBtn = fsec:AddMultiDropdown({ Name = "Select Buttons", Options = Library._FastButtonOrder, NoConfig = true, Placeholder = "None", Callback = function(v) fm.SelButtons = v fm:Refresh() end })
+    fsec:AddToggle({ Name = "Enable Fast Menu", Tooltip = "A small floating panel with the functions you pick below, usable while the menu is closed", NoFastMenu = true, Callback = function(v) fm:SetVisible(v) end })
+    local selFunc = fsec:AddMultiDropdown({ Name = "Select Functions", Tooltip = "Toggles to show in the Fast Menu", Options = Library._FastToggleOrder, NoConfig = true, Placeholder = "None", Callback = function(v) fm.SelToggles = v fm:Refresh() end })
+    local selBtn = fsec:AddMultiDropdown({ Name = "Select Buttons", Tooltip = "Buttons to show in the Fast Menu", Options = Library._FastButtonOrder, NoConfig = true, Placeholder = "None", Callback = function(v) fm.SelButtons = v fm:Refresh() end })
     local function syncSel()
         selFunc.Refresh(Library._FastToggleOrder, true)
         selFunc.Set(fm.SelToggles, true)
@@ -4658,45 +4658,45 @@ function Window:AddSettingsTab()
     fm.OnSel = syncSel
     table.insert(Library._FastChanged, syncSel)
     syncSel()
-    fsec:AddSlider({ Name = "Menu Scale", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) fm:SetScale(v / 100) end })
-    fsec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Fast Menu Lock", Callback = function(v) fm:SetLocked(v) end })
-    fsec:AddButton({ Name = "Reset Position", NoFastMenu = true, Flag = "Fast Menu Reset", Callback = function() fm:SetPosition(UDim2.new(0, 20, 0.3, 0)) end })
+    fsec:AddSlider({ Name = "Menu Scale", Tooltip = "Size of the Fast Menu", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) fm:SetScale(v / 100) end })
+    fsec:AddToggle({ Name = "Lock Position", Tooltip = "Stops the Fast Menu from being dragged", NoFastMenu = true, Flag = "Fast Menu Lock", Callback = function(v) fm:SetLocked(v) end })
+    fsec:AddButton({ Name = "Reset Position", Tooltip = "Moves the Fast Menu back to its default spot", NoFastMenu = true, Flag = "Fast Menu Reset", Callback = function() fm:SetPosition(UDim2.new(0, 20, 0.3, 0)) end })
 
     -- Teleport
     local tsec = R:CreateSection({ Name = "Teleport", Icon = "plane" })
     ui.ExecuteOnTeleport = tsec:AddToggle({ Name = "Execute on Teleport", Default = self.ExecuteOnTeleport, NoFastMenu = true, Tooltip = "Re-runs the script after a server change", Callback = function(v) win:SetExecuteOnTeleport(v) end })
-    ui.TeleportDelay = tsec:AddSlider({ Name = "Execution Delay", Min = 0, Max = 30, Default = self.TeleportDelay, Suffix = "s", Decimals = 1, Callback = function(v) win:SetTeleportDelay(v) end })
-    ui.TeleportFile = tsec:AddTextbox({ Name = "Teleport File", Default = self.TeleportFile, Callback = function(v) if v ~= "" then win:SetTeleportFile(v) end end })
+    ui.TeleportDelay = tsec:AddSlider({ Name = "Execution Delay", Tooltip = "Seconds to wait after a teleport before the script runs again", Min = 0, Max = 30, Default = self.TeleportDelay, Suffix = "s", Decimals = 1, Callback = function(v) win:SetTeleportDelay(v) end })
+    ui.TeleportFile = tsec:AddTextbox({ Name = "Teleport File", Tooltip = "File in the workspace folder that runs after a teleport", Default = self.TeleportFile, Callback = function(v) if v ~= "" then win:SetTeleportFile(v) end end })
 
     -- Actions
     local asec = R:CreateSection({ Name = "Actions", Icon = "activity" })
     pref(asec, "AddToggle", { Name = "Anti-AFK", Icon = "coffee", Default = true, NoFastMenu = true, Tooltip = "Prevents the 20-minute idle kick", Callback = function(v) Library:SetAntiAFK(v) end })
     pref(asec, "AddToggle", { Name = "Anti-Lag", Icon = "gauge", NoFastMenu = true, Tooltip = "Low graphics, no shadows/particles/decals, also for newly spawned objects. Turning off keeps what was already simplified until rejoin", Callback = function(v) Library:SetAntiLag(v) end })
-    asec:AddButton({ Name = "Server Hop", Icon = "shuffle", Primary = true, NoFastMenu = true, Callback = function()
+    asec:AddButton({ Name = "Server Hop", Tooltip = "Joins a different server of this game", Icon = "shuffle", Primary = true, NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Server Hop", Text = "Searching for a server...", Type = "info" })
         task.spawn(function() Library:ServerHop() end)
     end })
-    asec:AddButton({ Name = "Rejoin Server", Icon = "rotate-ccw", NoFastMenu = true, Callback = function()
+    asec:AddButton({ Name = "Rejoin Server", Tooltip = "Leaves and joins this same server again", Icon = "rotate-ccw", NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Rejoin", Text = "Rejoining...", Type = "info" })
         task.spawn(function() Library:Rejoin() end)
     end })
-    asec:AddButton({ Name = "Unload Menu", Icon = "power", NoFastMenu = true, Callback = function() Library:Unload() end })
+    asec:AddButton({ Name = "Unload Menu", Tooltip = "Closes the menu and turns the script's UI off until you run it again", Icon = "power", NoFastMenu = true, Callback = function() Library:Unload() end })
 
     -- Notifications
     local nsec = R:CreateSection({ Name = "Notifications", Icon = "bell" })
-    ui.NotifySound = pref(nsec, "AddToggle", { Name = "Notification Sound", Default = self.NotifySound, NoFastMenu = true, Callback = function(v) win:SetNotifySound(v) end })
-    ui.LoaderSound = pref(nsec, "AddToggle", { Name = "Startup Sound (Loader)", Default = self.LoaderSound, NoFastMenu = true, Callback = function(v) win:SetLoaderSound(v) end })
-    ui.NotifySoundName = pref(nsec, "AddDropdown", { Name = "Sound Type", Options = Library.SoundNames, Default = self.NotifySoundName, Callback = function(v)
+    ui.NotifySound = pref(nsec, "AddToggle", { Name = "Notification Sound", Tooltip = "Play a sound with every notification", Default = self.NotifySound, NoFastMenu = true, Callback = function(v) win:SetNotifySound(v) end })
+    ui.LoaderSound = pref(nsec, "AddToggle", { Name = "Startup Sound (Loader)", Tooltip = "Play a sound when the menu loads", Default = self.LoaderSound, NoFastMenu = true, Callback = function(v) win:SetLoaderSound(v) end })
+    ui.NotifySoundName = pref(nsec, "AddDropdown", { Name = "Sound Type", Tooltip = "Which sound notifications use (plays a preview)", Options = Library.SoundNames, Default = self.NotifySoundName, Callback = function(v)
         if v then
             win:SetNotifySoundName(v)
             Library:PlaySound(v, win.NotifySoundVolume)
         end
     end })
-    ui.NotifySoundVolume = pref(nsec, "AddSlider", { Name = "Sound Volume", Min = 0, Max = 100, Default = self.NotifySoundVolume * 100, Suffix = "%", Callback = function(v) win:SetNotifySoundVolume(v) end })
-    nsec:AddButton({ Name = "Test Notification", Icon = "bell-ring", NoFastMenu = true, Callback = function()
+    ui.NotifySoundVolume = pref(nsec, "AddSlider", { Name = "Sound Volume", Tooltip = "Volume of menu sounds", Min = 0, Max = 100, Default = self.NotifySoundVolume * 100, Suffix = "%", Callback = function(v) win:SetNotifySoundVolume(v) end })
+    nsec:AddButton({ Name = "Test Notification", Tooltip = "Shows a sample notification", Icon = "bell-ring", NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Test", Text = "Sound: " .. win.NotifySoundName, Type = "success" })
     end })
-    nsec:AddButton({ Name = "Test Warning & Error", Icon = "triangle-alert", NoFastMenu = true, Callback = function()
+    nsec:AddButton({ Name = "Test Warning & Error", Tooltip = "Shows a sample warning and error", Icon = "triangle-alert", NoFastMenu = true, Callback = function()
         win:Notify({ Title = "Warning", Text = "This is a test warning", Type = "warning" })
         task.delay(0.7, function() win:Notify({ Title = "Error", Text = "This is a test error", Type = "error" }) end)
     end })
@@ -4704,10 +4704,10 @@ function Window:AddSettingsTab()
     -- Keybind List
     local kl = self.KeybindList
     local ksec = L:CreateSection({ Name = "Keybind List", Icon = "keyboard", Collapsible = true })
-    ksec:AddToggle({ Name = "Enable Keybind List", NoFastMenu = true, Callback = function(v) kl:SetVisible(v) end })
-    ksec:AddSlider({ Name = "HUD Scale", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) kl:SetScale(v / 100) end })
-    ksec:AddToggle({ Name = "Lock Position", NoFastMenu = true, Flag = "Keybind List Lock", Callback = function(v) kl:SetLocked(v) end })
-    ksec:AddButton({ Name = "Reset Position", NoFastMenu = true, Flag = "Keybind List Reset", Callback = function() kl:SetPosition(UDim2.new(1, -230, 0.3, 0)) end })
+    ksec:AddToggle({ Name = "Enable Keybind List", Tooltip = "An on-screen list of your bound keys and whether they are on", NoFastMenu = true, Callback = function(v) kl:SetVisible(v) end })
+    ksec:AddSlider({ Name = "HUD Scale", Tooltip = "Size of the Keybind List", Min = 50, Max = 150, Default = 100, Suffix = "%", Callback = function(v) kl:SetScale(v / 100) end })
+    ksec:AddToggle({ Name = "Lock Position", Tooltip = "Stops the Keybind List from being dragged", NoFastMenu = true, Flag = "Keybind List Lock", Callback = function(v) kl:SetLocked(v) end })
+    ksec:AddButton({ Name = "Reset Position", Tooltip = "Moves the Keybind List back to its default spot", NoFastMenu = true, Flag = "Keybind List Reset", Callback = function() kl:SetPosition(UDim2.new(1, -230, 0.3, 0)) end })
 
     -- Customization: everything about how the menu looks
     local ctab = self:CreateTab({ Name = "Customization", Icon = "brush" })
@@ -4722,7 +4722,7 @@ function Window:AddSettingsTab()
     for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
     local rainbow = false
     local customPicker
-    pref(theme, "AddDropdown", { Name = "Accent Color", Options = accNames, Default = "Purple", Callback = function(v)
+    pref(theme, "AddDropdown", { Name = "Accent Color", Tooltip = "Main highlight color of the menu", Options = accNames, Default = "Purple", Callback = function(v)
         for _, a in ipairs(Library.Accents) do
             if a[1] == v then
                 Library:SetAccent(a[2])
@@ -4730,7 +4730,7 @@ function Window:AddSettingsTab()
             end
         end
     end })
-    customPicker = pref(theme, "AddColorPicker", { Name = "Custom Accent", Default = Theme.Accent, Callback = function(c) if not rainbow then Library:SetAccent(c) end end })
+    customPicker = pref(theme, "AddColorPicker", { Name = "Custom Accent", Tooltip = "Pick any accent color", Default = Theme.Accent, Callback = function(c) if not rainbow then Library:SetAccent(c) end end })
     pref(theme, "AddToggle", { Name = "Rainbow Accent", NoFastMenu = true, Tooltip = "Cycles the accent color through the rainbow", Callback = function(v) rainbow = v end })
     do
         local t = 0
@@ -4751,15 +4751,15 @@ function Window:AddSettingsTab()
         gradOn = v
         Library:SetAccent2(v and gradPicker and gradPicker.Get() or nil)
     end })
-    gradPicker = pref(theme, "AddColorPicker", { Name = "Gradient Color", Default = rgb(80, 200, 255), Callback = function(c) if gradOn then Library:SetAccent2(c) end end })
+    gradPicker = pref(theme, "AddColorPicker", { Name = "Gradient Color", Tooltip = "Second color used when Gradient Accent is on", Default = rgb(80, 200, 255), Callback = function(c) if gradOn then Library:SetAccent2(c) end end })
     pref(theme, "AddDropdown", { Name = "Font", Options = Library:FontNames(), Default = Library:GetFont(), Tooltip = "Menu font (all built-in Roblox fonts)", OptionFont = fontFamily, Callback = function(v) Library:SetFont(v) end })
 
     local wsec = CL:CreateSection({ Name = "Window", Icon = "app-window" })
     pref(wsec, "AddSlider", { Name = "Window Opacity", Min = 20, Max = 100, Default = 100, Suffix = "%", Tooltip = "Lower lets the game show through the menu (looks like glass with Background Blur)", Callback = function(v) win:SetOpacity(v / 100) end })
     pref(wsec, "AddSlider", { Name = "Corner Roundness", Min = 0, Max = 250, Default = 100, Suffix = "%", Tooltip = "0% square, 100% as designed", Callback = function(v) win:SetRoundness(v / 100) end })
-    pref(wsec, "AddSlider", { Name = "Text Size", Min = 80, Max = 125, Default = 100, Suffix = "%", Callback = function(v) win:SetTextScale(v / 100) end })
-    pref(wsec, "AddDropdown", { Name = "Sidebar Side", Options = { "Left", "Right" }, Default = "Left", Callback = function(v) win:SetSidebarSide(v) end })
-    pref(wsec, "AddSlider", { Name = "Sidebar Width", Min = 150, Max = 320, Default = SIDE_W, Suffix = " px", Callback = function(v) win:SetSidebarWidth(v) end })
+    pref(wsec, "AddSlider", { Name = "Text Size", Tooltip = "Size of all text in the menu", Min = 80, Max = 125, Default = 100, Suffix = "%", Callback = function(v) win:SetTextScale(v / 100) end })
+    pref(wsec, "AddDropdown", { Name = "Sidebar Side", Tooltip = "Put the tab list on the left or right", Options = { "Left", "Right" }, Default = "Left", Callback = function(v) win:SetSidebarSide(v) end })
+    pref(wsec, "AddSlider", { Name = "Sidebar Width", Tooltip = "Width of the tab list", Min = 150, Max = 320, Default = SIDE_W, Suffix = " px", Callback = function(v) win:SetSidebarWidth(v) end })
     pref(wsec, "AddToggle", { Name = "Animated Border", NoFastMenu = true, Tooltip = "A glowing accent line running around the window", Callback = function(v) win:SetBorderGlow(v) end })
     local bgNames = { "Off" }
     for _, e in ipairs(Library.Art) do table.insert(bgNames, e.Name) end
@@ -4770,42 +4770,42 @@ function Window:AddSettingsTab()
     end
     bgDrop = pref(wsec, "AddDropdown", { Name = "Picture", Options = bgNames, Default = "Off", Tooltip = "A see-through picture over the menu (clicks go through it)", Callback = function() applyBg() end })
     bgCustom = pref(wsec, "AddTextbox", { Name = "Link", Placeholder = "rbxassetid / image url", Tooltip = "Your own picture; empty uses the one above", Callback = function() applyBg() end })
-    pref(wsec, "AddSlider", { Name = "Picture Visibility", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
-    pref(wsec, "AddToggle", { Name = "Background Blur", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
-    pref(wsec, "AddToggle", { Name = "Show Watermark", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
+    pref(wsec, "AddSlider", { Name = "Picture Visibility", Tooltip = "How visible the menu picture is", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
+    pref(wsec, "AddToggle", { Name = "Background Blur", Tooltip = "Blurs the game behind the menu while it is open", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
+    pref(wsec, "AddToggle", { Name = "Show Watermark", Tooltip = "Small panel at the top left with FPS, ping and time", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
     if not IS_MOBILE then
         pref(wsec, "AddToggle", { Name = "Custom Cursor", NoFastMenu = true, Tooltip = "An accent cursor with a trail while the menu is open", Callback = function(v) win:SetCustomCursor(v) end })
     end
     pref(wsec, "AddSlider", { Name = "Bar Width", Min = 40, Max = 600, Default = BAR_W, Suffix = " px", Tooltip = "Length of the open bar at the bottom of the screen", Callback = function(v) win:SetBarWidth(v) end })
 
     local anim = CL:CreateSection({ Name = "Animation", Icon = "wand-sparkles" })
-    pref(anim, "AddSlider", { Name = "Animation Speed", Min = 30, Max = 300, Default = 100, Suffix = "%", Callback = function(v) Library:SetAnimationSpeed(v / 100) end })
+    pref(anim, "AddSlider", { Name = "Animation Speed", Tooltip = "Speed of every menu animation", Min = 30, Max = 300, Default = 100, Suffix = "%", Callback = function(v) Library:SetAnimationSpeed(v / 100) end })
     pref(anim, "AddDropdown", { Name = "Open Style", Options = { "Pop", "Zoom", "Slide", "Fade", "TV" }, Default = "Pop", Tooltip = "How the menu appears", Callback = function(v) win.OpenStyle = v end })
-    pref(anim, "AddDropdown", { Name = "Tab Animation", Options = { "Slide Up", "Slide Side", "Fade", "None" }, Default = "Slide Up", Callback = function(v) win.TabAnim = v end })
+    pref(anim, "AddDropdown", { Name = "Tab Animation", Tooltip = "How pages change when you switch tabs", Options = { "Slide Up", "Slide Side", "Fade", "None" }, Default = "Slide Up", Callback = function(v) win.TabAnim = v end })
 
     local fx = CR:CreateSection({ Name = "Effects", Icon = "sparkles" })
-    pref(fx, "AddDropdown", { Name = "Background Effect", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
-    pref(fx, "AddSlider", { Name = "Effect Density", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
-    pref(fx, "AddSlider", { Name = "Effect Speed", Min = 10, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectSpeed(v / 100) end })
+    pref(fx, "AddDropdown", { Name = "Background Effect", Tooltip = "Particles on screen behind the menu", Options = Library.EffectNames, Default = win.Effects.Name, Callback = function(v) win:SetEffect(v) end })
+    pref(fx, "AddSlider", { Name = "Effect Density", Tooltip = "How many particles", Min = 20, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectDensity(v / 100) end })
+    pref(fx, "AddSlider", { Name = "Effect Speed", Tooltip = "How fast particles move", Min = 10, Max = 300, Default = 100, Suffix = "%", Callback = function(v) win:SetEffectSpeed(v / 100) end })
     local fxColorOn, fxPicker = false, nil
-    pref(fx, "AddToggle", { Name = "Custom Effect Color", NoFastMenu = true, Callback = function(v)
+    pref(fx, "AddToggle", { Name = "Custom Effect Color", Tooltip = "Paint all particles in the color below", NoFastMenu = true, Callback = function(v)
         fxColorOn = v
         win:SetEffectColor(v and fxPicker and fxPicker.Get() or nil)
     end })
-    fxPicker = pref(fx, "AddColorPicker", { Name = "Effect Color", Default = rgb(255, 255, 255), Callback = function(c) if fxColorOn then win:SetEffectColor(c) end end })
+    fxPicker = pref(fx, "AddColorPicker", { Name = "Effect Color", Tooltip = "Particle color when Custom Effect Color is on", Default = rgb(255, 255, 255), Callback = function(c) if fxColorOn then win:SetEffectColor(c) end end })
     pref(fx, "AddToggle", { Name = "Effects When Closed", NoFastMenu = true, Tooltip = "Keep the particles on screen while the menu is closed", Callback = function(v) win:SetEffectsAlways(v) end })
 
     local mus = CR:CreateSection({ Name = "Music", Icon = "music" })
     pref(mus, "AddDropdown", { Name = "Menu Music", Options = win.Music.Names(), Default = "Off", Tooltip = "Plays while the menu is open (tracks from the repo's Music folder)", Callback = function(v) win.Music.Set(v) end })
-    pref(mus, "AddSlider", { Name = "Music Volume", Min = 0, Max = 100, Default = 30, Suffix = "%", Callback = function(v) win.Music.SetVolume(v / 100) end })
+    pref(mus, "AddSlider", { Name = "Music Volume", Tooltip = "Volume of the menu music", Min = 0, Max = 100, Default = 30, Suffix = "%", Callback = function(v) win.Music.SetVolume(v / 100) end })
 
     if #win.Art.List > 0 then
         local art = CR:CreateSection({ Name = "Corner Art", Icon = "image" })
-        pref(art, "AddDropdown", { Name = "Character Art", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
-        pref(art, "AddDropdown", { Name = "Art Side", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
+        pref(art, "AddDropdown", { Name = "Character Art", Tooltip = "Character standing in the screen corner. Random picks a new one every time the menu opens", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
+        pref(art, "AddDropdown", { Name = "Art Side", Tooltip = "Bottom-right or bottom-left corner", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
         pref(art, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
         pref(art, "AddSlider", { Name = "Art Offset", Min = 0, Max = 400, Default = win.Art.Offset, Suffix = " px", Tooltip = "Distance from the side of the screen", Callback = function(v) win:SetArtOffset(v) end })
-        pref(art, "AddSlider", { Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
+        pref(art, "AddSlider", { Name = "Art Opacity", Tooltip = "How see-through the corner art is", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
         pref(art, "AddToggle", { Name = "Art When Closed", NoFastMenu = true, Tooltip = "Keep the art on screen while the menu is closed", Callback = function(v) win:SetArtAlways(v) end })
     end
     if #win.MenuArt.List > 0 then
@@ -4815,7 +4815,7 @@ function Window:AddSettingsTab()
         pref(msec, "AddSlider", { Name = "Menu Art Position", Min = 0, Max = 100, Default = ma.Offset * 100, Suffix = "%", Tooltip = "Where along the top edge: 0% left, 100% right", Callback = function(v) win:SetMenuArtPosition(v / 100) end })
         pref(msec, "AddSlider", { Name = "Menu Art Size", Min = 15, Max = 150, Default = ma.Size * 100, Suffix = "%", Tooltip = "Width as a share of the window width", Callback = function(v) win:SetMenuArtSize(v / 100) end })
         pref(msec, "AddSlider", { Name = "Menu Art Overlap", Min = 0, Max = 80, Default = ma.Sink * 100, Suffix = "%", Tooltip = "How much of the picture sinks into the window (arms, elbows)", Callback = function(v) win:SetMenuArtOverlap(v / 100) end })
-        pref(msec, "AddSlider", { Name = "Menu Art Opacity", Min = 10, Max = 100, Default = ma.Opacity * 100, Suffix = "%", Callback = function(v) win:SetMenuArtOpacity(v / 100) end })
+        pref(msec, "AddSlider", { Name = "Menu Art Opacity", Tooltip = "How see-through the art on the menu is", Min = 10, Max = 100, Default = ma.Opacity * 100, Suffix = "%", Callback = function(v) win:SetMenuArtOpacity(v / 100) end })
     end
 
     prefsReady = true
