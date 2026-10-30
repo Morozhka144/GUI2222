@@ -2758,7 +2758,7 @@ local function buildArt(win, cfg, kind)
     function A.Place()
         fit()
         holder.Position = home()
-        if win.Open and A.Current then tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.25) end
+        if (win.Open or A.Always) and A.Current then tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.25) end
     end
     function A.Set(name)
         A.Name, A.Current = tostring(name), nil
@@ -2828,7 +2828,19 @@ local function buildArt(win, cfg, kind)
             end
         end
     end)
+    -- corner art only: stay on screen while the menu is closed (no re-roll or entrance, it never left)
+    function A.SetAlways(b)
+        A.Always = (not menu) and b and true or false
+        if win.Open or not A.Current then return end
+        if A.Always then
+            holder.Position = home()
+            tween(holder, { GroupTransparency = 1 - A.Opacity }, 0.3)
+        else
+            tween(holder, { GroupTransparency = 1 }, 0.25)
+        end
+    end
     function A.OnToggle(open)
+        if A.Always then return end
         if open and A.Name == "Random" then
             A.Current = A.PickRandom()
             render()
@@ -3706,6 +3718,7 @@ function Window:SetArtSide(side) self.Art.Side = side == "Left" and "Left" or "R
 function Window:SetArtSize(k) self.Art.Size = math.clamp(tonumber(k) or 0.6, 0.2, 1) self.Art.Place() end
 function Window:SetArtOffset(px) self.Art.Offset = math.clamp(tonumber(px) or ART_MARGIN, 0, 600) self.Art.Place() end
 function Window:SetArtOpacity(k) self.Art.Opacity = math.clamp(tonumber(k) or 1, 0, 1) self.Art.Place() end
+function Window:SetArtAlways(b) self.Art.SetAlways(b) end
 
 -- art leaning on the window's top edge: "Off", "Random" or a slot name from Library.MenuArt / cfg.MenuArt
 function Window:SetMenuArt(name) self.MenuArt.Set(name) end
@@ -4793,6 +4806,7 @@ function Window:AddSettingsTab()
         pref(art, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
         pref(art, "AddSlider", { Name = "Art Offset", Min = 0, Max = 400, Default = win.Art.Offset, Suffix = " px", Tooltip = "Distance from the side of the screen", Callback = function(v) win:SetArtOffset(v) end })
         pref(art, "AddSlider", { Name = "Art Opacity", Min = 10, Max = 100, Default = win.Art.Opacity * 100, Suffix = "%", Callback = function(v) win:SetArtOpacity(v / 100) end })
+        pref(art, "AddToggle", { Name = "Art When Closed", NoFastMenu = true, Tooltip = "Keep the art on screen while the menu is closed", Callback = function(v) win:SetArtAlways(v) end })
     end
     if #win.MenuArt.List > 0 then
         local ma = win.MenuArt
