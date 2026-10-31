@@ -479,7 +479,7 @@ function FS.mkdirs(path)
     end
 end
 
-local function httpGet(url)
+local function rawGet(url)
     local ok, r = pcall(function() return game:HttpGet(url) end)
     if ok and type(r) == "string" then return r end
     local req = request or http_request or (syn and syn.request)
@@ -488,6 +488,17 @@ local function httpGet(url)
         if ok2 and res and (res.StatusCode == 200 or res.Success) then return res.Body end
     end
     return nil
+end
+
+-- one request at a time: a burst of parallel downloads right at startup crashes mobile executors
+local httpBusy = false
+local function httpGet(url)
+    local t0 = os.clock()
+    while httpBusy and os.clock() - t0 < 30 do task.wait(0.05) end
+    httpBusy = true
+    local body = rawGet(url)
+    httpBusy = false
+    return body
 end
 
 ----------------------------------------------------------------------
@@ -2944,7 +2955,12 @@ local function buildArt(win, cfg, kind)
     A.Holder = holder
 
     local function key(e) return A.Dir .. "/" .. tostring(e.Image or e.File or "") end
-    local function ready(e) return Library._artIds[key(e)] ~= nil end
+    -- loaded, or at least on disk (opens without a download)
+    local function ready(e)
+        if Library._artIds[key(e)] ~= nil then return true end
+        local img = tostring(e.Image or e.File or "")
+        return not img:find("^https?://") and FS.isfile(Library.Folder .. "/" .. key(e)) or false
+    end
     local function home()
         if menu then return UDim2.fromScale(A.Offset, 0) end
         local left = A.Side == "Left"
@@ -3038,13 +3054,23 @@ local function buildArt(win, cfg, kind)
         for _, e in ipairs(list) do if e == A.Current then still = true end end
         if not still and A.Name ~= "Off" then A.Set(A.Current and "Random" or A.Name) end
     end
-    -- then download and preload every picture one by one, so switching (and Random) is instant later
+    -- then, once the window has settled, download every picture one by one so switching (and Random) is
+    -- instant later. Phones only cache the files on disk, slowly: decoding ~25 textures at once runs them
+    -- out of memory, and a download burst during startup crashed the first launch.
     task.spawn(function()
+        task.wait(IS_MOBILE and 8 or 2)
+        if Library.Window ~= win then return end
         syncList()
         local CP = S("ContentProvider")
         for _, e in ipairs(A.List) do
             if Library.Window ~= win then return end
-            if not ready(e) then
+            if IS_MOBILE then
+                local img = tostring(e.Image or e.File or "")
+                if not ready(e) and not img:find("^https?://") and not img:find("^rbx") and not tonumber(img) then
+                    Remote.fetch(A.Dir, img, isImage)
+                    task.wait(1)
+                end
+            elseif not Library._artIds[key(e)] then
                 local id = Library:_ArtAsset(e, A.Dir)
                 if id then pcall(CP.PreloadAsync, CP, { id }) end
             end
