@@ -349,11 +349,10 @@ local function effScale()
     return Library._Scale
 end
 
+-- pointer position in the same space as GuiObject.AbsolutePosition (mouse and touch alike)
 local function ptr(i)
-    if i.UserInputType == Enum.UserInputType.Touch then
-        return Vector2.new(i.Position.X, i.Position.Y) + GuiService:GetGuiInset()
-    end
-    return UIS:GetMouseLocation()
+    if i then return Vector2.new(i.Position.X, i.Position.Y) end
+    return UIS:GetMouseLocation() - GuiService:GetGuiInset()
 end
 local function isPress(i)
     return i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch
@@ -366,21 +365,25 @@ local function inside(g, p)
     return p.X >= ap.X and p.X <= ap.X + as.X and p.Y >= ap.Y and p.Y <= ap.Y + as.Y
 end
 
+local activeDrag = nil
 local function dragRegion(gui, fn, onStart, onEnd)
-    local dragging = false
+    local owner = nil -- the touch InputObject, or "mouse"
     connect(gui.InputBegan, function(i)
-        if isPress(i) then
-            dragging = true
-            if onStart then onStart() end
-            fn(ptr(i))
-        end
+        if not isPress(i) or i.UserInputState ~= Enum.UserInputState.Begin or activeDrag then return end
+        owner = i.UserInputType == Enum.UserInputType.Touch and i or "mouse"
+        activeDrag = owner
+        if onStart then onStart() end
+        fn(ptr(i))
     end)
     connect(UIS.InputChanged, function(i)
-        if dragging and isMove(i) then fn(ptr(i)) end
+        if not owner then return end
+        if (owner == "mouse" and i.UserInputType == Enum.UserInputType.MouseMovement) or i == owner then fn(ptr(i)) end
     end)
     connect(UIS.InputEnded, function(i)
-        if dragging and isPress(i) then
-            dragging = false
+        if not owner then return end
+        if (owner == "mouse" and i.UserInputType == Enum.UserInputType.MouseButton1) or i == owner then
+            owner = nil
+            activeDrag = nil
             if onEnd then onEnd() end
         end
     end)
@@ -1437,7 +1440,7 @@ local function buildFastMenu(win)
                 row.MouseEnter:Connect(function() tween(row, { BackgroundColor3 = Theme.FieldHover }, 0.15) end)
                 row.MouseLeave:Connect(function() tween(row, { BackgroundColor3 = Theme.Field }, 0.15) end)
                 connect(row.MouseButton1Click, function()
-                    ripple(row, UIS:GetMouseLocation(), Theme.Accent)
+                    ripple(row, ptr(), Theme.Accent)
                     entry.Fire()
                 end)
             end
@@ -1737,7 +1740,7 @@ function Section:AddButton(cfg)
         else tween(row, { BackgroundColor3 = Theme.Field }, 0.2) tween(st, { Transparency = 0.92 }, 0.2) end
     end)
     connect(row.MouseButton1Down, function()
-        ripple(row, UIS:GetMouseLocation(), primary and WHITE or Theme.Accent)
+        ripple(row, ptr(), primary and WHITE or Theme.Accent)
         tween(scale, { Scale = 0.97 }, 0.1, Enum.EasingStyle.Quad)
     end)
     connect(row.MouseButton1Up, function() tween(scale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back) end)
@@ -2060,6 +2063,31 @@ local function dropdownCore(self, cfg, multi)
                 AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 2,
             }, { vlist(2), pad(4, 4, 4, 4) })
             trackAccent(list, "ScrollBarImageColor3")
+            -- on phones the list is moved only by the code below, so the built-in scroll can't fight it
+            if UIS.TouchEnabled and not UIS.MouseEnabled then list.ScrollingEnabled = false end
+            local touch, touchY, startY, dragged = nil, 0, 0, false
+            local cBegan, cChanged, cEnded
+            local function drop() cBegan:Disconnect() cChanged:Disconnect() cEnded:Disconnect() end
+            cBegan = UIS.InputBegan:Connect(function(i)
+                if not list.Parent then drop() return end
+                if i.UserInputType == Enum.UserInputType.Touch and inside(list, ptr(i)) then
+                    touch, touchY, startY, dragged = i, i.Position.Y, list.CanvasPosition.Y, false
+                end
+            end)
+            cChanged = UIS.InputChanged:Connect(function(i)
+                if not list.Parent then drop() return end
+                if i ~= touch then return end
+                local d = i.Position.Y - touchY
+                if math.abs(d) > 6 then dragged = true end
+                if dragged then
+                    local maxY = math.max(0, list.AbsoluteCanvasSize.Y - list.AbsoluteWindowSize.Y)
+                    list.CanvasPosition = Vector2.new(0, math.clamp(startY - d, 0, maxY))
+                end
+            end)
+            cEnded = UIS.InputEnded:Connect(function(i)
+                if not list.Parent then drop() return end
+                if i == touch then touch = nil task.defer(function() dragged = false end) end
+            end)
             local items = {}
             for i, o in ipairs(options) do
                 local b = new("TextButton", { Parent = list, LayoutOrder = i, Size = UDim2.new(1, 0, 0, ITEM), BackgroundColor3 = WHITE, BackgroundTransparency = 1, Text = "" }, { corner(6) })
@@ -2080,7 +2108,7 @@ local function dropdownCore(self, cfg, multi)
                 end
                 b.MouseEnter:Connect(function() tween(b, { BackgroundTransparency = 0.95 }, 0.12) end)
                 b.MouseLeave:Connect(function() tween(b, { BackgroundTransparency = 1 }, 0.15) end)
-                b.MouseButton1Click:Connect(function() choose(o) end)
+                b.MouseButton1Click:Connect(function() if not dragged then choose(o) end end)
             end
             local function renderItems(instant)
                 local t = instant and 0 or 0.18
