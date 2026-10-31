@@ -2833,8 +2833,8 @@ local function buildEffects(win)
         layer.Visible = E.Always or win.Open
     end
     function E.OnToggle(open)
-        if open then layer.Visible = true
-        else task.delay(0.2, function() if not win.Open and not E.Always then layer.Visible = false end end) end
+        -- gone the moment the menu closes (the loop stops then, so a delay only showed frozen particles)
+        layer.Visible = open or E.Always
     end
     return E
 end
@@ -3670,10 +3670,9 @@ function Library:CreateWindow(cfg)
     Library:RegisterFunction("_WindowSize", function() return win.Size end, function(v)
         if typeof(v) == "Vector2" then win:SetSize(v.X, v.Y, true) end
     end)
-    Library:RegisterFunction("_FastMenuPosition", function() return win.FastMenu:GetPosition() end, function(v) win.FastMenu:SetPosition(v) end)
+    -- (Fast Menu / Keybind List positions live in the shared Settings.json, see AddSettingsTab)
     Library:RegisterFunction("_FastMenuToggles", function() return win.FastMenu.SelToggles end, function(v) win.FastMenu:SetToggles(v) end)
     Library:RegisterFunction("_FastMenuButtons", function() return win.FastMenu.SelButtons end, function(v) win.FastMenu:SetButtons(v) end)
-    Library:RegisterFunction("_KeybindListPosition", function() return win.KeybindList:GetPosition() end, function(v) win.KeybindList:SetPosition(v) end)
 
     genv.MoroLumina = Library
 
@@ -4855,6 +4854,9 @@ function Window:AddSettingsTab()
     -- to <Folder>/Settings.json and kept out of per-game configs. Fast Menu, Keybind List and Teleport stay per script.
     local stored = Library:LoadPrefs()
     local prefEls, prefsReady, saveQueued = {}, false, false
+    -- saved dropdown choices whose option isn't listed yet (music tracks and repo art arrive later): applied
+    -- once the list refreshes, and never overwritten by the default in the meantime
+    local pending = {}
     self.Prefs = prefEls -- name -> element, e.g. win.Prefs["Background Effect"].Set("Snow")
     local function savePrefs()
         if not prefsReady or saveQueued then return end
@@ -4863,21 +4865,42 @@ function Window:AddSettingsTab()
             saveQueued = false
             for name, el in pairs(prefEls) do
                 local ok, v = pcall(el.Get)
-                if ok and v ~= nil then stored[name] = encode(v) end
+                if ok and v ~= nil and pending[name] == nil then stored[name] = encode(v) end
             end
             Library:SavePrefs(stored)
         end)
     end
     local function pref(sec, method, cfg)
         cfg.NoConfig = true
+        local name = cfg.Name
         local cb, ccb = cfg.Callback, cfg.ChangedCallback
-        cfg.Callback = function(...) call(cb, ...) savePrefs() end
+        cfg.Callback = function(...) pending[name] = nil call(cb, ...) savePrefs() end
         if method == "AddKeybind" then cfg.ChangedCallback = function(...) call(ccb, ...) savePrefs() end end
         local el = sec[method](sec, cfg)
-        prefEls[cfg.Name] = el
-        if stored[cfg.Name] ~= nil then pcall(el.Set, decode(stored[cfg.Name])) end
+        prefEls[name] = el
+        if stored[name] ~= nil then
+            local want = decode(stored[name])
+            pcall(el.Set, want)
+            if method == "AddDropdown" and want ~= nil and el.Get() ~= want then
+                pending[name] = want
+                local refresh = el.Refresh
+                el.Refresh = function(...)
+                    refresh(...)
+                    if pending[name] ~= nil then pcall(el.Set, pending[name]) end
+                end
+            end
+        end
         return el
     end
+    -- a floating panel's spot on screen is shared like the prefs (what it shows stays in the script's config)
+    local function prefPosition(name, panel)
+        local el = { Get = function() return panel:GetPosition() end, Set = function(p) if typeof(p) == "UDim2" then panel.Frame.Position = p end end }
+        prefEls[name] = el
+        if stored[name] ~= nil then pcall(el.Set, decode(stored[name])) end
+        panel.Frame:GetPropertyChangedSignal("Position"):Connect(savePrefs)
+    end
+    prefPosition("Fast Menu Position", self.FastMenu)
+    prefPosition("Keybind List Position", self.KeybindList)
 
     -- Interface
     local iface = L:CreateSection({ Name = "Interface", Icon = "monitor" })
