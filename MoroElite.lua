@@ -88,7 +88,7 @@ local Theme = {
     Text = rgb(242, 242, 250),
     Sub = rgb(156, 156, 178),
     Dim = rgb(100, 100, 122),
-    Accent = rgb(140, 100, 255),
+    Accent = rgb(236, 146, 168),
     Good = rgb(60, 220, 130),
     Warn = rgb(255, 186, 60),
     Bad = rgb(255, 77, 95),
@@ -125,7 +125,7 @@ Library.Accents = {
     { "Lime", rgb(160, 240, 50) }, { "Teal", rgb(20, 190, 170) }, { "Rose", rgb(255, 90, 125) },
     { "Indigo", rgb(95, 90, 240) }, { "Sky", rgb(90, 190, 255) }, { "Ruby", rgb(224, 17, 95) },
     { "Mint", rgb(110, 240, 190) }, { "Lavender", rgb(185, 160, 255) }, { "Coral", rgb(255, 115, 90) },
-    { "Snow", rgb(236, 240, 250) }, { "Violet", rgb(150, 60, 240) },
+    { "Snow", rgb(236, 240, 250) }, { "Violet", rgb(150, 60, 240) }, { "Blossom", rgb(236, 146, 168) },
 }
 
 local function initState()
@@ -236,10 +236,9 @@ local function hlist(p, halign)
     return new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, p or 0), VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = halign or Enum.HorizontalAlignment.Left })
 end
 
+-- second gradient stop: only Gradient Accent sets one, otherwise accent "gradients" are a flat accent
 local function accent2()
-    if Library._Accent2 then return Library._Accent2 end
-    local h, s, v = Theme.Accent:ToHSV()
-    return Color3.fromHSV((h + 0.07) % 1, math.min(s * 1.05, 1), v * 0.82)
+    return Library._Accent2 or Theme.Accent
 end
 local function trackAccent(o, prop)
     table.insert(Library._AccentObjs, { o, prop })
@@ -1373,7 +1372,7 @@ local function makePanel(win, title, icon, defaultPos)
     local header = new("Frame", { Parent = P.Frame, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1 })
     local _, ic, isText = makeIcon(header, icon, 14, Theme.Accent, "•", UDim2.fromOffset(12, 17), Vector2.new(0, 0.5))
     onAccent(function() if isText then ic.TextColor3 = Theme.Accent else ic.ImageColor3 = Theme.Accent end end)
-    new("TextLabel", { Parent = header, Position = UDim2.fromOffset(32, 0), Size = UDim2.new(1, -40, 1, 0), Text = title, W = "Bold", TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left })
+    new("TextLabel", { Parent = header, Position = UDim2.fromOffset(32, 0), Size = UDim2.new(1, -40, 1, 0), Text = title, W = "SemiBold", TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left })
     local line = new("Frame", { Parent = header, AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = WHITE })
     new("UIGradient", { Parent = line, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.85), NumberSequenceKeypoint.new(1, 1) }) })
     P.List = new("Frame", { Parent = P.Frame, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { vlist(4), pad(8, 8, 8, 8) })
@@ -1627,11 +1626,9 @@ local function createSection(tab, colFrame, cfg)
     else
         local dot = new("Frame", { Parent = header, AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 16, 0.5, 0), Size = UDim2.fromOffset(6, 6), BackgroundColor3 = Theme.Accent }, { corner("full") })
         trackAccent(dot, "BackgroundColor3")
-        local g = glow(dot, Theme.Accent, 16, 0.4)
-        trackAccent(g, "ImageColor3")
         tx = 30
     end
-    new("TextLabel", { Parent = header, Position = UDim2.fromOffset(tx, 0), Size = UDim2.new(1, -tx - 40, 1, 0), Text = sec.Name, W = "Bold", TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+    new("TextLabel", { Parent = header, Position = UDim2.fromOffset(tx, 0), Size = UDim2.new(1, -tx - 40, 1, 0), Text = sec.Name, W = "SemiBold", TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
     local chevObj, chevText
     if sec.Collapsible then
         local _, ic, isText = makeIcon(header, "chevron-down", 16, Theme.Sub, "v", UDim2.new(1, -16, 0.5, 0), Vector2.new(1, 0.5))
@@ -1716,8 +1713,6 @@ function Section:AddButton(cfg)
     local name = cfg.Name or "Button"
     local primary = cfg.Primary
     local wrap = new("Frame", { Parent = self.Content, LayoutOrder = nextOrder(self), Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1 })
-    local gl
-    if primary then gl = glow(wrap, Theme.Accent, 30, 0.75) trackAccent(gl, "ImageColor3") end
     local row = new("TextButton", {
         Parent = wrap, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1, -8, 0, 32),
         BackgroundColor3 = primary and WHITE or Theme.Field, Text = "", ClipsDescendants = true, ZIndex = 2,
@@ -1733,7 +1728,7 @@ function Section:AddButton(cfg)
         h, iconObj, iconText = makeIcon(inner, cfg.Icon, 15, Theme.Text, nil)
         h.LayoutOrder = 1
     end
-    local lbl = new("TextLabel", { Parent = inner, LayoutOrder = 2, Size = UDim2.fromOffset(0, 32), AutomaticSize = Enum.AutomaticSize.X, Text = name, W = primary and "Bold" or "SemiBold", ZIndex = 3 })
+    local lbl = new("TextLabel", { Parent = inner, LayoutOrder = 2, Size = UDim2.fromOffset(0, 32), AutomaticSize = Enum.AutomaticSize.X, Text = name, W = "SemiBold", ZIndex = 3 })
     onAccent(function()
         if primary then
             local c = contrast(Theme.Accent)
@@ -1742,19 +1737,19 @@ function Section:AddButton(cfg)
         end
     end)
     row.MouseEnter:Connect(function()
-        if primary then tween(gl, { ImageTransparency = 0.5 }, 0.2) tween(st, { Transparency = 0.6 }, 0.2)
+        if primary then tween(st, { Transparency = 0.6 }, 0.2)
         else tween(row, { BackgroundColor3 = Theme.FieldHover }, 0.15) tween(st, { Transparency = 0.85 }, 0.15) end
     end)
     row.MouseLeave:Connect(function()
-        tween(scale, { Scale = 1 }, 0.3, Enum.EasingStyle.Back)
-        if primary then tween(gl, { ImageTransparency = 0.75 }, 0.25) tween(st, { Transparency = 0.8 }, 0.25)
+        tween(scale, { Scale = 1 }, 0.3)
+        if primary then tween(st, { Transparency = 0.8 }, 0.25)
         else tween(row, { BackgroundColor3 = Theme.Field }, 0.2) tween(st, { Transparency = 0.92 }, 0.2) end
     end)
     connect(row.MouseButton1Down, function()
         ripple(row, ptr(), primary and WHITE or Theme.Accent)
         tween(scale, { Scale = 0.97 }, 0.1, Enum.EasingStyle.Quad)
     end)
-    connect(row.MouseButton1Up, function() tween(scale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back) end)
+    connect(row.MouseButton1Up, function() tween(scale, { Scale = 1 }, 0.35) end)
     local function fire() call(cfg.Callback) end
     connect(row.MouseButton1Click, fire)
     self.Window:_AddSearch(name, wrap, self)
@@ -1792,8 +1787,6 @@ function Section:AddToggle(cfg)
     local right = rightBox(row, label, xo)
 
     local sw = new("Frame", { Parent = right, LayoutOrder = 10, Size = UDim2.fromOffset(40, 22), BackgroundTransparency = 1, ZIndex = 3 })
-    local gl = glow(sw, Theme.Accent, 34, 1, 3)
-    trackAccent(gl, "ImageColor3")
     local track = new("Frame", { Parent = sw, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Off, ZIndex = 3 }, { corner("full"), stroke(WHITE, 0.92) })
     local on = new("Frame", { Parent = track, Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1, ZIndex = 3 }, { corner("full") })
     trackGrad(new("UIGradient", { Parent = on }))
@@ -1805,7 +1798,6 @@ function Section:AddToggle(cfg)
     local function render(anim)
         local t = anim and 0.16 or 0
         tween(on, { BackgroundTransparency = obj.Value and 0 or 1 }, t, Enum.EasingStyle.Quad)
-        tween(gl, { ImageTransparency = obj.Value and 0.55 or 1 }, anim and 0.25 or 0, Enum.EasingStyle.Quad)
         tween(knob, { Position = knobPos(), BackgroundColor3 = obj.Value and WHITE or rgb(190, 190, 205) }, anim and 0.2 or 0, Enum.EasingStyle.Quart)
         tween(label, { TextColor3 = obj.Value and Theme.Text or Theme.Sub }, t, Enum.EasingStyle.Quad)
         if iconObj then tintIcon(iconObj, iconText, obj.Value and Theme.Accent or Theme.Sub, t) end
@@ -1949,7 +1941,7 @@ function Section:AddSlider(cfg)
     end
     local function knobState()
         local sz = dragging and 18 or (hovering and 16 or 14)
-        tween(knob, { Size = UDim2.fromOffset(sz, sz) }, 0.2, Enum.EasingStyle.Back)
+        tween(knob, { Size = UDim2.fromOffset(sz, sz) }, 0.2)
         tween(kglow, { ImageTransparency = dragging and 0.35 or (hovering and 0.7 or 1) }, 0.2)
     end
     local function set(v, silent)
@@ -2875,14 +2867,14 @@ function Library:_LogoAsset(custom)
     return id or nil
 end
 
--- puts the logo over a tile, hiding the fallback letter / icon once it has loaded
+-- puts the logo over its spot, hiding the fallback letter / icon once it has loaded
 local function placeLogo(win, tile, fallback, size, z)
     if win.Logo == false then return end
     local img = new("ImageLabel", {
         Parent = tile, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(size, size),
         ScaleType = Enum.ScaleType.Fit, ImageTransparency = 1, Visible = false, ZIndex = z,
     })
-    onAccent(function() img.ImageColor3 = contrast(Theme.Accent) end)
+    trackAccent(img, "ImageColor3")
     task.spawn(function()
         local id = Library:_LogoAsset(win.Logo)
         if not id or not img.Parent then return end
@@ -2955,7 +2947,7 @@ local function artPlaceholder(parent, name)
     trackAccent(body, "BackgroundColor3")
     local _, ic = makeIcon(f, "image", 20, Theme.Accent, nil, UDim2.new(0.5, 0, 0, 34), Vector2.new(0.5, 0.5))
     if ic then onAccent(function() if ic:IsA("ImageLabel") then ic.ImageColor3 = Theme.Accent else ic.TextColor3 = Theme.Accent end end) end
-    new("TextLabel", { Parent = f, Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 0, 20), Text = string.upper(name or "Art"), W = "Bold", TextSize = 16 })
+    new("TextLabel", { Parent = f, Position = UDim2.fromOffset(0, 52), Size = UDim2.new(1, 0, 0, 20), Text = name or "Art", W = "SemiBold", TextSize = 16 })
     new("TextLabel", { Parent = f, Position = UDim2.fromOffset(0, 72), Size = UDim2.new(1, 0, 0, 14), Text = "PNG coming soon", W = "Regular", TextSize = 11, TextColor3 = Theme.Dim })
     return f
 end
@@ -3276,38 +3268,29 @@ function Library:CreateWindow(cfg)
 
     local brand = new("Frame", { Parent = Side, Size = UDim2.new(1, 0, 0, HEAD_H + 8), BackgroundTransparency = 1, ZIndex = 3 })
     local logoWrap = new("Frame", { Parent = brand, Position = UDim2.fromOffset(16, 15), Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, ZIndex = 3 })
-    local logoGlow = glow(logoWrap, Theme.Accent, 40, 0.45, 3)
-    trackAccent(logoGlow, "ImageColor3")
-    local logo = new("Frame", { Parent = logoWrap, Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, ZIndex = 4 }, { corner(10) })
-    trackGrad(new("UIGradient", { Parent = logo, Rotation = 45 }))
-    stroke(WHITE, 0.75).Parent = logo
+    local logo = new("Frame", { Parent = logoWrap, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 4 })
     local logoContent
     if cfg.Icon then
-        local h, ic, isText = makeIcon(logo, cfg.Icon, 18, WHITE, win.Title:sub(1, 1):upper())
+        local h, ic, isText = makeIcon(logo, cfg.Icon, 22, Theme.Accent, win.Title:sub(1, 1):upper(), UDim2.fromScale(0.5, 0.5), Vector2.new(0.5, 0.5))
         ic.ZIndex = 5
         logoContent = { ic, isText, h }
     else
-        local t = new("TextLabel", { Parent = logo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 18, ZIndex = 5 })
+        local t = new("TextLabel", { Parent = logo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "SemiBold", TextSize = 24, ZIndex = 5 })
         logoContent = { t, true }
     end
     onAccent(function()
-        local c = contrast(Theme.Accent)
-        if logoContent[2] then logoContent[1].TextColor3 = c else logoContent[1].ImageColor3 = c end
+        if logoContent[2] then logoContent[1].TextColor3 = Theme.Accent else logoContent[1].ImageColor3 = Theme.Accent end
     end)
-    placeLogo(win, logo, logoContent[3] or logoContent[1], 24, 5)
-    new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 15), Size = UDim2.new(1, -72, 0, 20), Text = win.Title, W = "Bold", TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
+    placeLogo(win, logo, logoContent[3] or logoContent[1], 42, 5)
+    new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 15), Size = UDim2.new(1, -72, 0, 20), Text = win.Title, W = "SemiBold", TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
     new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 35), Size = UDim2.new(1, -72, 0, 14), Text = win.Subtitle, W = "Regular", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
     dragify(brand, Root, nil, function() win:_ClosePopup() end)
 
     local tabScroll = new("ScrollingFrame", { Parent = Side, Position = UDim2.fromOffset(0, HEAD_H + 12), Size = UDim2.new(1, 0, 1, -(HEAD_H + 12) - 70), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 0, ZIndex = 3 })
     local tabHolder = new("Frame", { Parent = tabScroll, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 3 })
-    local pill = new("Frame", { Parent = tabHolder, Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 0, 38), BackgroundColor3 = Theme.Accent, Visible = false, ZIndex = 3 }, { corner(9) })
-    trackAccent(pill, "BackgroundColor3")
-    new("UIGradient", { Parent = pill, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.78), NumberSequenceKeypoint.new(1, 0.96) }) })
+    local pill = new("Frame", { Parent = tabHolder, Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -20, 0, 38), BackgroundColor3 = WHITE, BackgroundTransparency = 0.95, Visible = false, ZIndex = 3 }, { corner(9), stroke(WHITE, 0.93) })
     local pillBar = new("Frame", { Parent = pill, AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(3, 18), BackgroundColor3 = Theme.Accent, ZIndex = 4 }, { corner("full") })
     trackAccent(pillBar, "BackgroundColor3")
-    local pillGlow = glow(pillBar, Theme.Accent, 26, 0.3, 4)
-    trackAccent(pillGlow, "ImageColor3")
     win.TabList = new("Frame", { Parent = tabHolder, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 4 }, { vlist(4), pad(10, 0, 10, 8) })
     win._pill, win._tabScroll = pill, tabScroll
 
@@ -3340,7 +3323,7 @@ function Library:CreateWindow(cfg)
     local Head = new("Frame", { Parent = Canvas, Position = UDim2.fromOffset(SIDE_W, 0), Size = UDim2.new(1, -SIDE_W, 0, HEAD_H), BackgroundTransparency = 1, ZIndex = 3 })
     win._head = Head
     new("Frame", { Parent = Head, AnchorPoint = Vector2.new(0, 1), Position = UDim2.fromScale(0, 1), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, ZIndex = 3 })
-    win._pageTitle = new("TextLabel", { Parent = Head, Position = UDim2.fromOffset(22, 10), Size = UDim2.new(0, 220, 0, 22), Text = "", W = "Bold", TextSize = 19, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
+    win._pageTitle = new("TextLabel", { Parent = Head, Position = UDim2.fromOffset(22, 10), Size = UDim2.new(0, 220, 0, 22), Text = "", W = "SemiBold", TextSize = 19, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
     win._pageSub = new("TextLabel", { Parent = Head, Position = UDim2.fromOffset(22, 32), Size = UDim2.new(0, 220, 0, 14), Text = "", W = "Regular", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4 })
     dragify(Head, Root, nil, function() win:_ClosePopup() end)
 
@@ -3533,7 +3516,7 @@ function Library:CreateWindow(cfg)
     trackGrad(new("UIGradient", { Parent = mob, Rotation = 20 }))
     local mobInner = new("Frame", { Parent = mob, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, { hlist(6, Enum.HorizontalAlignment.Center) })
     local _, mobIc, mobIcT = makeIcon(mobInner, "layout-grid", 14, WHITE, nil)
-    local mobTxt = new("TextLabel", { Parent = mobInner, LayoutOrder = 2, Size = UDim2.fromOffset(0, 34), AutomaticSize = Enum.AutomaticSize.X, Text = "OPEN", W = "Bold", TextSize = 13 })
+    local mobTxt = new("TextLabel", { Parent = mobInner, LayoutOrder = 2, Size = UDim2.fromOffset(0, 34), AutomaticSize = Enum.AutomaticSize.X, Text = "Open", W = "SemiBold", TextSize = 13 })
     onAccent(function()
         local c = contrast(Theme.Accent)
         mobTxt.TextColor3 = c
@@ -3564,8 +3547,6 @@ function Library:CreateWindow(cfg)
         Parent = Gui, AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -4), Size = UDim2.fromOffset(BAR_W + 80, 24),
         BackgroundTransparency = 1, Text = "", Visible = false,
     })
-    local barGlow = glow(bar, Theme.Accent, 30, 1)
-    trackAccent(barGlow, "ImageColor3")
     local barLine = new("Frame", {
         Parent = bar, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(BAR_W, 5),
         BackgroundColor3 = WHITE, BackgroundTransparency = 0.35,
@@ -3577,7 +3558,6 @@ function Library:CreateWindow(cfg)
             BackgroundColor3 = barHover and Theme.Accent or WHITE,
             BackgroundTransparency = barHover and 0 or (win.Open and 0.6 or 0.35),
         }, 0.25)
-        tween(barGlow, { ImageTransparency = barHover and 0.45 or 1 }, 0.25)
     end
     win._barLook = barLook
     bar.MouseEnter:Connect(function() barHover = true barLook() end)
@@ -3730,18 +3710,15 @@ function Library:CreateWindow(cfg)
     ------------------------------------------------------------------
     if win.LoaderSound then Library:PlaySound("Loader", win.NotifySoundVolume) end
     local splash = new("CanvasGroup", { Parent = Canvas, Size = UDim2.fromScale(1, 1), BackgroundColor3 = Theme.Bg, ZIndex = 200 })
-    local sGlow = new("ImageLabel", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.fromOffset(260, 260), Image = IMG_GLOW, ImageColor3 = Theme.Accent, ImageTransparency = 1, ZIndex = 201 })
-    local sLogo = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.fromOffset(60, 60), BackgroundColor3 = WHITE, ZIndex = 202 }, { corner(16), stroke(WHITE, 0.7) })
-    trackGrad(new("UIGradient", { Parent = sLogo, Rotation = 45 }))
+    local sLogo = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.fromOffset(60, 60), BackgroundTransparency = 1, ZIndex = 202 })
     local sLogoScale = new("UIScale", { Parent = sLogo, Scale = 0.4 })
-    local sLetter = new("TextLabel", { Parent = sLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 30, TextColor3 = contrast(Theme.Accent), ZIndex = 203 })
-    placeLogo(win, sLogo, sLetter, 40, 203)
-    local sTitle = new("TextLabel", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 48), Size = UDim2.fromOffset(300, 26), Text = win.Title, W = "Bold", TextSize = 22, TextTransparency = 1, ZIndex = 202 })
+    local sLetter = new("TextLabel", { Parent = sLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "SemiBold", TextSize = 40, TextColor3 = Theme.Accent, ZIndex = 203 })
+    placeLogo(win, sLogo, sLetter, 76, 203)
+    local sTitle = new("TextLabel", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 48), Size = UDim2.fromOffset(300, 26), Text = win.Title, W = "SemiBold", TextSize = 22, TextTransparency = 1, ZIndex = 202 })
     local sBar = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 88), Size = UDim2.fromOffset(150, 3), BackgroundColor3 = Theme.Off, ZIndex = 202 }, { corner("full") })
     local sFill = new("Frame", { Parent = sBar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, ZIndex = 203 }, { corner("full") })
     trackGrad(new("UIGradient", { Parent = sFill }))
-    tween(sLogoScale, { Scale = 1 }, 0.7, Enum.EasingStyle.Back)
-    tween(sGlow, { ImageTransparency = 0.55 }, 0.8)
+    tween(sLogoScale, { Scale = 1 }, 0.7)
     task.delay(0.15, function() tween(sTitle, { TextTransparency = 0 }, 0.5) end)
     tween(sFill, { Size = UDim2.fromScale(1, 1) }, 1.1, Enum.EasingStyle.Quart)
     task.delay(1.25, function()
@@ -3757,12 +3734,11 @@ function Library:CreateWindow(cfg)
         Visible = false, GroupTransparency = 1, Active = true,
     }, { corner(12), stroke(WHITE, 0.88), pad(7, 0, 14, 0), hlist(10) })
     win._mini, win._miniScale = mini, new("UIScale", { Parent = mini })
-    local miniLogo = new("Frame", { Parent = mini, LayoutOrder = 1, Size = UDim2.fromOffset(30, 30), BackgroundColor3 = WHITE }, { corner(8) })
-    trackGrad(new("UIGradient", { Parent = miniLogo, Rotation = 45 }))
-    local miniLetter = new("TextLabel", { Parent = miniLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 15 })
-    onAccent(function() miniLetter.TextColor3 = contrast(Theme.Accent) end)
-    placeLogo(win, miniLogo, miniLetter, 20, 2)
-    new("TextLabel", { Parent = mini, LayoutOrder = 2, Size = UDim2.fromOffset(0, 44), AutomaticSize = Enum.AutomaticSize.X, Text = win.Title, W = "Bold", TextSize = 14 })
+    local miniLogo = new("Frame", { Parent = mini, LayoutOrder = 1, Size = UDim2.fromOffset(30, 30), BackgroundTransparency = 1 })
+    local miniLetter = new("TextLabel", { Parent = miniLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "SemiBold", TextSize = 20 })
+    trackAccent(miniLetter, "TextColor3")
+    placeLogo(win, miniLogo, miniLetter, 34, 2)
+    new("TextLabel", { Parent = mini, LayoutOrder = 2, Size = UDim2.fromOffset(0, 44), AutomaticSize = Enum.AutomaticSize.X, Text = win.Title, W = "SemiBold", TextSize = 14 })
     makeIcon(mini, "maximize-2", 14, Theme.Sub, "+").LayoutOrder = 3
     do
         local dragging, moved, sp, st
@@ -3854,7 +3830,7 @@ function Window:Minimize()
     mini.GroupTransparency = 1
     self._miniScale.Scale = 0.9
     tween(mini, { GroupTransparency = 0 }, 0.25)
-    tween(self._miniScale, { Scale = 1 }, 0.35, Enum.EasingStyle.Back)
+    tween(self._miniScale, { Scale = 1 }, 0.35)
 end
 
 -- how the menu is opened without a keyboard: "Bar" (bottom of the screen), "Button" (draggable OPEN pill) or "Off"
@@ -3977,7 +3953,7 @@ function Window:Toggle(state)
             cv.Size = UDim2.fromScale(1, 0.02)
             tween(cv, { Size = UDim2.fromScale(1, 1) }, 0.4, Enum.EasingStyle.Quart)
         else
-            tween(self.AnimScale, { Scale = 1 }, 0.45, Enum.EasingStyle.Back)
+            tween(self.AnimScale, { Scale = 1 }, 0.45)
         end
         tween(cv, { GroupTransparency = 0 }, style == "TV" and 0.12 or 0.3)
         tween(self._Shadow, { ImageTransparency = 0.2 }, 0.4)
@@ -4113,7 +4089,10 @@ function Window:SetBorderGlow(on)
     end
     st.Color, st.Transparency, st.Thickness = WHITE, 0.1, 1.5
     local g = new("UIGradient", { Parent = st })
-    local function paint() g.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Theme.Accent), ColorSequenceKeypoint.new(0.5, accent2()), ColorSequenceKeypoint.new(1, Theme.Accent) }) end
+    local function paint()
+        local mid = Library._Accent2 or Theme.Accent:Lerp(Theme.Bg, 0.7)
+        g.Color = ColorSequence.new({ ColorSequenceKeypoint.new(0, Theme.Accent), ColorSequenceKeypoint.new(0.5, mid), ColorSequenceKeypoint.new(1, Theme.Accent) })
+    end
     paint()
     self._borderGrad = g
     local acc = 0
@@ -4402,7 +4381,7 @@ function Window:_OpenHistory(anchor)
     local n = math.min(#hist, 6)
     local H = 44 + math.max(n, 1) * 48 + 6
     self:_OpenPopup(anchor, 300, H, function(body)
-        new("TextLabel", { Parent = body, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -28, 0, 40), Text = "Notifications", W = "Bold", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left })
+        new("TextLabel", { Parent = body, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -28, 0, 40), Text = "Notifications", W = "SemiBold", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left })
         new("TextLabel", { Parent = body, Position = UDim2.fromOffset(14, 0), Size = UDim2.new(1, -28, 0, 40), Text = #hist .. " total", TextSize = 12, W = "Regular", TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Right })
         new("Frame", { Parent = body, Position = UDim2.fromOffset(0, 40), Size = UDim2.new(1, 0, 0, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93 })
         local list = new("Frame", { Parent = body, Position = UDim2.fromOffset(0, 44), Size = UDim2.new(1, 0, 1, -44), BackgroundTransparency = 1 }, { vlist(0), pad(6, 0, 6, 6) })
@@ -4514,10 +4493,8 @@ function Window:_BuildProfileTab()
     local av = new("Frame", { Parent = id, Position = UDim2.fromOffset(8, 10), Size = UDim2.fromOffset(54, 54), BackgroundColor3 = Theme.Field }, { corner("full") })
     local avStroke = new("UIStroke", { Parent = av, Thickness = 2, Color = Theme.Accent })
     trackAccent(avStroke, "Color")
-    local avGlow = glow(av, Theme.Accent, 30, 0.75, 0)
-    trackAccent(avGlow, "ImageColor3")
     fillAvatar(av, 22, 1)
-    new("TextLabel", { Parent = id, Position = UDim2.fromOffset(76, 12), Size = UDim2.new(1, -84, 0, 24), Text = LocalPlayer.DisplayName, W = "Bold", TextSize = 21, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+    new("TextLabel", { Parent = id, Position = UDim2.fromOffset(76, 12), Size = UDim2.new(1, -84, 0, 24), Text = LocalPlayer.DisplayName, W = "SemiBold", TextSize = 21, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
     new("TextLabel", { Parent = id, Position = UDim2.fromOffset(76, 36), Size = UDim2.new(1, -84, 0, 16), Text = "@" .. LocalPlayer.Name, W = "Regular", TextSize = 13, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
     local badges = new("Frame", { Parent = id, Position = UDim2.fromOffset(76, 55), Size = UDim2.new(1, -84, 0, 18), BackgroundTransparency = 1 }, { hlist(5) })
     local function badge(text, color, order)
@@ -4595,7 +4572,7 @@ function Window:Notify(o)
     table.insert(Library._History, { Title = title, Text = text, Type = typ, Time = os.time() })
     if not self.Open or not (self._popup and self._popup.Anchor) then
         self._unread += 1
-        if self._badge then tween(self._badge, { Size = UDim2.fromOffset(8, 8) }, 0.3, Enum.EasingStyle.Back) end
+        if self._badge then tween(self._badge, { Size = UDim2.fromOffset(8, 8) }, 0.3) end
     end
 
     if o.Sound ~= false and self.NotifySound then
@@ -4613,7 +4590,7 @@ function Window:Notify(o)
     local content = new("Frame", { Parent = card, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, { pad(56, 12, 34, 16), vlist(3) })
     local iconBg = new("Frame", { Parent = card, Position = UDim2.fromOffset(14, 12), Size = UDim2.fromOffset(30, 30), BackgroundColor3 = color, BackgroundTransparency = 0.82 }, { corner(9) })
     makeIcon(iconBg, icons[typ] or "info", 16, color, "!")
-    new("TextLabel", { Parent = content, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 18), Text = title, W = "Bold", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
+    new("TextLabel", { Parent = content, LayoutOrder = 1, Size = UDim2.new(1, 0, 0, 18), Text = title, W = "SemiBold", TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd })
     if text ~= "" then
         new("TextLabel", { Parent = content, LayoutOrder = 2, Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Text = text, W = "Regular", TextSize = 13, TextColor3 = Theme.Sub, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left })
     end
@@ -4642,7 +4619,7 @@ function Window:Notify(o)
         if gone or not card.Parent then return end
         local h = card.AbsoluteSize.Y + 8
         tween(wrap, { Size = UDim2.new(1, 0, 0, h) }, 0.35)
-        tween(card, { Position = UDim2.fromOffset(0, 0), GroupTransparency = 0 }, 0.5, Enum.EasingStyle.Back)
+        tween(card, { Position = UDim2.fromOffset(0, 0), GroupTransparency = 0 }, 0.5)
         tween(bar, { Size = UDim2.fromScale(0, 1) }, duration, Enum.EasingStyle.Linear)
         task.wait(duration)
         dismiss()
@@ -4653,7 +4630,7 @@ function Library:Notify(o) if self.Window then return self.Window:Notify(o) end 
 
 -- Tabs
 function Window:AddTabLabel(text)
-    new("TextLabel", { Parent = self.TabList, LayoutOrder = #self.Tabs * 2 + 1, Size = UDim2.new(1, 0, 0, 26), Text = tostring(text):upper(), W = "Bold", TextSize = 11, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4 }, { pad(12, 8, 0, 0) })
+    new("TextLabel", { Parent = self.TabList, LayoutOrder = #self.Tabs * 2 + 1, Size = UDim2.new(1, 0, 0, 26), Text = tostring(text), W = "Medium", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4 }, { pad(12, 8, 0, 0) })
 end
 
 function Window:CreateTab(cfg)
@@ -5047,7 +5024,7 @@ function Window:AddSettingsTab()
     for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
     local rainbow = false
     local customPicker
-    pref(theme, "AddDropdown", { Name = "Accent Color", Tooltip = "Main highlight color of the menu", Options = accNames, Default = "Purple", Callback = function(v)
+    pref(theme, "AddDropdown", { Name = "Accent Color", Tooltip = "Main highlight color of the menu", Options = accNames, Default = "Blossom", Callback = function(v)
         for _, a in ipairs(Library.Accents) do
             if a[1] == v then
                 Library:SetAccent(a[2])
