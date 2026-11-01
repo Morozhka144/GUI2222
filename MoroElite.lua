@@ -2846,6 +2846,53 @@ local function isImage(body)
     return type(body) == "string" and #body > 200 and (body:sub(1, 4) == "\137PNG" or body:sub(1, 3) == "\255\216\255")
 end
 
+-- Brand mark: the repo's Logo/logo.png (white on transparent, tinted in game) replaces the title's first
+-- letter on the sidebar tile, the loading splash and the minimized pill.
+-- CreateWindow({ Logo = false }) keeps the letter, Logo = "rbxassetid://..." (or an asset id) uses your own.
+Library.LogoFile = "logo.png"
+function Library:_LogoAsset(custom)
+    if custom then return tonumber(custom) and ("rbxassetid://" .. custom) or tostring(custom) end
+    local t0 = os.clock()
+    while self._logoBusy and os.clock() - t0 < 15 do task.wait(0.05) end
+    if self._logoId ~= nil then return self._logoId or nil end
+    self._logoBusy = true
+    local ca = getcustomasset or getsynasset
+    local id = false
+    if ca then
+        local path = self.Folder .. "/Logo/" .. self.LogoFile
+        if FS.isfile(path) then
+            -- cached: show it right away and look for a newer one in the background (used next run)
+            task.spawn(Remote.fetch, "Logo", self.LogoFile, isImage)
+        else
+            path = Remote.fetch("Logo", self.LogoFile, isImage)
+        end
+        if path then
+            local ok, r = pcall(ca, path)
+            if ok and r then id = r end
+        end
+    end
+    self._logoId, self._logoBusy = id, nil
+    return id or nil
+end
+
+-- puts the logo over a tile, hiding the fallback letter / icon once it has loaded
+local function placeLogo(win, tile, fallback, size, z)
+    if win.Logo == false then return end
+    local img = new("ImageLabel", {
+        Parent = tile, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(size, size),
+        ScaleType = Enum.ScaleType.Fit, ImageTransparency = 1, Visible = false, ZIndex = z,
+    })
+    onAccent(function() img.ImageColor3 = contrast(Theme.Accent) end)
+    task.spawn(function()
+        local id = Library:_LogoAsset(win.Logo)
+        if not id or not img.Parent then return end
+        img.Image = id
+        img.Visible = true
+        fallback.Visible = false
+        tween(img, { ImageTransparency = 0 }, 0.2)
+    end)
+end
+
 -- entry.Image: "rbxassetid://..", an asset id, an http(s) url or a file name in the repo folder dir (default "Art")
 function Library:_ArtAsset(entry, dir)
     dir = dir or "Art"
@@ -3139,6 +3186,7 @@ function Library:CreateWindow(cfg)
     self.Window = win
     win.Title = cfg.Title or "MoroElite"
     win.Subtitle = cfg.Subtitle or ("v" .. Library.Version)
+    win.Logo = cfg.Logo -- nil = the MoroElite logo, false = title letter, or your own image
     win.ToggleKey = resolveKey(cfg.ToggleKey or cfg.Key) or Enum.KeyCode.RightShift
     win.TeleportFile = cfg.TeleportFile or "Doors.lua"
     win.TeleportDelay = cfg.TeleportDelay or 5
@@ -3235,9 +3283,9 @@ function Library:CreateWindow(cfg)
     stroke(WHITE, 0.75).Parent = logo
     local logoContent
     if cfg.Icon then
-        local _, ic, isText = makeIcon(logo, cfg.Icon, 18, WHITE, win.Title:sub(1, 1):upper())
+        local h, ic, isText = makeIcon(logo, cfg.Icon, 18, WHITE, win.Title:sub(1, 1):upper())
         ic.ZIndex = 5
-        logoContent = { ic, isText }
+        logoContent = { ic, isText, h }
     else
         local t = new("TextLabel", { Parent = logo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 18, ZIndex = 5 })
         logoContent = { t, true }
@@ -3246,6 +3294,7 @@ function Library:CreateWindow(cfg)
         local c = contrast(Theme.Accent)
         if logoContent[2] then logoContent[1].TextColor3 = c else logoContent[1].ImageColor3 = c end
     end)
+    placeLogo(win, logo, logoContent[3] or logoContent[1], 24, 5)
     new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 15), Size = UDim2.new(1, -72, 0, 20), Text = win.Title, W = "Bold", TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
     new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 35), Size = UDim2.new(1, -72, 0, 14), Text = win.Subtitle, W = "Regular", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
     dragify(brand, Root, nil, function() win:_ClosePopup() end)
@@ -3685,7 +3734,8 @@ function Library:CreateWindow(cfg)
     local sLogo = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.fromOffset(60, 60), BackgroundColor3 = WHITE, ZIndex = 202 }, { corner(16), stroke(WHITE, 0.7) })
     trackGrad(new("UIGradient", { Parent = sLogo, Rotation = 45 }))
     local sLogoScale = new("UIScale", { Parent = sLogo, Scale = 0.4 })
-    new("TextLabel", { Parent = sLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 30, TextColor3 = contrast(Theme.Accent), ZIndex = 203 })
+    local sLetter = new("TextLabel", { Parent = sLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 30, TextColor3 = contrast(Theme.Accent), ZIndex = 203 })
+    placeLogo(win, sLogo, sLetter, 40, 203)
     local sTitle = new("TextLabel", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 48), Size = UDim2.fromOffset(300, 26), Text = win.Title, W = "Bold", TextSize = 22, TextTransparency = 1, ZIndex = 202 })
     local sBar = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 88), Size = UDim2.fromOffset(150, 3), BackgroundColor3 = Theme.Off, ZIndex = 202 }, { corner("full") })
     local sFill = new("Frame", { Parent = sBar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, ZIndex = 203 }, { corner("full") })
@@ -3711,6 +3761,7 @@ function Library:CreateWindow(cfg)
     trackGrad(new("UIGradient", { Parent = miniLogo, Rotation = 45 }))
     local miniLetter = new("TextLabel", { Parent = miniLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "Heavy", TextSize = 15 })
     onAccent(function() miniLetter.TextColor3 = contrast(Theme.Accent) end)
+    placeLogo(win, miniLogo, miniLetter, 20, 2)
     new("TextLabel", { Parent = mini, LayoutOrder = 2, Size = UDim2.fromOffset(0, 44), AutomaticSize = Enum.AutomaticSize.X, Text = win.Title, W = "Bold", TextSize = 14 })
     makeIcon(mini, "maximize-2", 14, Theme.Sub, "+").LayoutOrder = 3
     do
