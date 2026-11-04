@@ -78,17 +78,17 @@ local IMG_GLOW = "rbxassetid://8992230677"
 
 local rgb = Color3.fromRGB
 local Theme = {
-    Bg = rgb(10, 10, 14),
-    Side = rgb(14, 14, 19),
-    Card = rgb(19, 19, 26),
-    Field = rgb(26, 26, 35),
-    FieldHover = rgb(34, 34, 46),
-    Popup = rgb(21, 21, 29),
-    Off = rgb(46, 46, 60),
-    Text = rgb(242, 242, 250),
-    Sub = rgb(156, 156, 178),
-    Dim = rgb(100, 100, 122),
-    Accent = rgb(236, 146, 168),
+    Bg = rgb(0, 0, 0),
+    Side = rgb(7, 7, 7),
+    Card = rgb(13, 13, 13),
+    Field = rgb(21, 21, 21),
+    FieldHover = rgb(30, 30, 30),
+    Popup = rgb(15, 15, 15),
+    Off = rgb(42, 42, 42),
+    Text = rgb(240, 240, 240),
+    Sub = rgb(152, 152, 152),
+    Dim = rgb(98, 98, 98),
+    Accent = rgb(240, 240, 240),
     Good = rgb(60, 220, 130),
     Warn = rgb(255, 186, 60),
     Bad = rgb(255, 77, 95),
@@ -104,6 +104,7 @@ local function pal(t)
     return out
 end
 Library.Themes = {
+    pal({ "Black", { 0, 0, 0 }, { 7, 7, 7 }, { 13, 13, 13 }, { 21, 21, 21 }, { 30, 30, 30 }, { 15, 15, 15 }, { 42, 42, 42 }, { 240, 240, 240 }, { 152, 152, 152 }, { 98, 98, 98 } }),
     pal({ "Midnight", { 10, 10, 14 }, { 14, 14, 19 }, { 19, 19, 26 }, { 26, 26, 35 }, { 34, 34, 46 }, { 21, 21, 29 }, { 46, 46, 60 }, { 242, 242, 250 }, { 156, 156, 178 }, { 100, 100, 122 } }),
     pal({ "Abyss", { 4, 4, 6 }, { 8, 8, 10 }, { 13, 13, 16 }, { 20, 20, 24 }, { 28, 28, 34 }, { 15, 15, 18 }, { 40, 40, 48 }, { 240, 240, 245 }, { 150, 150, 160 }, { 95, 95, 105 } }),
     pal({ "Graphite", { 18, 18, 18 }, { 23, 23, 23 }, { 29, 29, 29 }, { 38, 38, 38 }, { 48, 48, 48 }, { 32, 32, 32 }, { 60, 60, 60 }, { 238, 238, 238 }, { 160, 160, 160 }, { 108, 108, 108 } }),
@@ -125,7 +126,7 @@ Library.Accents = {
     { "Lime", rgb(160, 240, 50) }, { "Teal", rgb(20, 190, 170) }, { "Rose", rgb(255, 90, 125) },
     { "Indigo", rgb(95, 90, 240) }, { "Sky", rgb(90, 190, 255) }, { "Ruby", rgb(224, 17, 95) },
     { "Mint", rgb(110, 240, 190) }, { "Lavender", rgb(185, 160, 255) }, { "Coral", rgb(255, 115, 90) },
-    { "Snow", rgb(236, 240, 250) }, { "Violet", rgb(150, 60, 240) }, { "Blossom", rgb(236, 146, 168) },
+    { "Snow", rgb(236, 240, 250) }, { "Violet", rgb(150, 60, 240) }, { "Blossom", rgb(236, 146, 168) }, { "White", rgb(240, 240, 240) },
 }
 
 local function initState()
@@ -1409,10 +1410,13 @@ local function miniSwitch(parent)
     local on = new("Frame", { Parent = track, Size = UDim2.fromScale(1, 1), BackgroundColor3 = WHITE, BackgroundTransparency = 1 }, { corner("full") })
     trackGrad(new("UIGradient", { Parent = on }))
     local knob = new("Frame", { Parent = track, AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 3, 0.5, 0), Size = UDim2.fromOffset(10, 10), BackgroundColor3 = rgb(200, 200, 215), ZIndex = 2 }, { corner("full") })
+    local cur = false
+    onAccent(function() if cur then knob.BackgroundColor3 = contrast(Theme.Accent) end end)
     return function(val, instant)
+        cur = val
         local t = instant and 0 or 0.25
         tween(on, { BackgroundTransparency = val and 0 or 1 }, t)
-        tween(knob, { Position = val and UDim2.new(0, 15, 0.5, 0) or UDim2.new(0, 3, 0.5, 0), BackgroundColor3 = val and WHITE or rgb(200, 200, 215) }, t)
+        tween(knob, { Position = val and UDim2.new(0, 15, 0.5, 0) or UDim2.new(0, 3, 0.5, 0), BackgroundColor3 = val and contrast(Theme.Accent) or rgb(200, 200, 215) }, t)
     end
 end
 
@@ -1795,10 +1799,11 @@ function Section:AddToggle(cfg)
     local obj = { Value = false }
     local listeners = {}
     local function knobPos() return obj.Value and UDim2.new(0, 40 - 3 - 16, 0.5, 0) or UDim2.new(0, 3, 0.5, 0) end
+    onAccent(function() if obj.Value then knob.BackgroundColor3 = contrast(Theme.Accent) end end)
     local function render(anim)
         local t = anim and 0.16 or 0
         tween(on, { BackgroundTransparency = obj.Value and 0 or 1 }, t, Enum.EasingStyle.Quad)
-        tween(knob, { Position = knobPos(), BackgroundColor3 = obj.Value and WHITE or rgb(190, 190, 205) }, anim and 0.2 or 0, Enum.EasingStyle.Quart)
+        tween(knob, { Position = knobPos(), BackgroundColor3 = obj.Value and contrast(Theme.Accent) or rgb(190, 190, 205) }, anim and 0.2 or 0, Enum.EasingStyle.Quart)
         tween(label, { TextColor3 = obj.Value and Theme.Text or Theme.Sub }, t, Enum.EasingStyle.Quad)
         if iconObj then tintIcon(iconObj, iconText, obj.Value and Theme.Accent or Theme.Sub, t) end
     end
@@ -3267,7 +3272,7 @@ function Library:CreateWindow(cfg)
     win._sideLine = new("Frame", { Parent = Side, AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.new(0, 1, 1, 0), BackgroundColor3 = WHITE, BackgroundTransparency = 0.93, ZIndex = 3 })
 
     local brand = new("Frame", { Parent = Side, Size = UDim2.new(1, 0, 0, HEAD_H + 8), BackgroundTransparency = 1, ZIndex = 3 })
-    local logoWrap = new("Frame", { Parent = brand, Position = UDim2.fromOffset(16, 15), Size = UDim2.fromOffset(36, 36), BackgroundTransparency = 1, ZIndex = 3 })
+    local logoWrap = new("Frame", { Parent = brand, Position = UDim2.fromOffset(14, 15), Size = UDim2.fromOffset(46, 36), BackgroundTransparency = 1, ZIndex = 3 })
     local logo = new("Frame", { Parent = logoWrap, Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 4 })
     local logoContent
     if cfg.Icon then
@@ -3281,9 +3286,9 @@ function Library:CreateWindow(cfg)
     onAccent(function()
         if logoContent[2] then logoContent[1].TextColor3 = Theme.Accent else logoContent[1].ImageColor3 = Theme.Accent end
     end)
-    placeLogo(win, logo, logoContent[3] or logoContent[1], 42, 5)
-    new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 15), Size = UDim2.new(1, -72, 0, 20), Text = win.Title, W = "SemiBold", TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
-    new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(62, 35), Size = UDim2.new(1, -72, 0, 14), Text = win.Subtitle, W = "Regular", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
+    placeLogo(win, logo, logoContent[3] or logoContent[1], 48, 5)
+    new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(68, 15), Size = UDim2.new(1, -78, 0, 20), Text = win.Title, W = "SemiBold", TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
+    new("TextLabel", { Parent = brand, Position = UDim2.fromOffset(68, 35), Size = UDim2.new(1, -78, 0, 14), Text = win.Subtitle, W = "Regular", TextSize = 12, TextColor3 = Theme.Dim, TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 3 })
     dragify(brand, Root, nil, function() win:_ClosePopup() end)
 
     local tabScroll = new("ScrollingFrame", { Parent = Side, Position = UDim2.fromOffset(0, HEAD_H + 12), Size = UDim2.new(1, 0, 1, -(HEAD_H + 12) - 70), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 0, ZIndex = 3 })
@@ -3713,7 +3718,7 @@ function Library:CreateWindow(cfg)
     local sLogo = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.42), Size = UDim2.fromOffset(60, 60), BackgroundTransparency = 1, ZIndex = 202 })
     local sLogoScale = new("UIScale", { Parent = sLogo, Scale = 0.4 })
     local sLetter = new("TextLabel", { Parent = sLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "SemiBold", TextSize = 40, TextColor3 = Theme.Accent, ZIndex = 203 })
-    placeLogo(win, sLogo, sLetter, 76, 203)
+    placeLogo(win, sLogo, sLetter, 96, 203)
     local sTitle = new("TextLabel", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 48), Size = UDim2.fromOffset(300, 26), Text = win.Title, W = "SemiBold", TextSize = 22, TextTransparency = 1, ZIndex = 202 })
     local sBar = new("Frame", { Parent = splash, AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0.42, 88), Size = UDim2.fromOffset(150, 3), BackgroundColor3 = Theme.Off, ZIndex = 202 }, { corner("full") })
     local sFill = new("Frame", { Parent = sBar, Size = UDim2.fromScale(0, 1), BackgroundColor3 = WHITE, ZIndex = 203 }, { corner("full") })
@@ -3734,10 +3739,10 @@ function Library:CreateWindow(cfg)
         Visible = false, GroupTransparency = 1, Active = true,
     }, { corner(12), stroke(WHITE, 0.88), pad(7, 0, 14, 0), hlist(10) })
     win._mini, win._miniScale = mini, new("UIScale", { Parent = mini })
-    local miniLogo = new("Frame", { Parent = mini, LayoutOrder = 1, Size = UDim2.fromOffset(30, 30), BackgroundTransparency = 1 })
+    local miniLogo = new("Frame", { Parent = mini, LayoutOrder = 1, Size = UDim2.fromOffset(42, 30), BackgroundTransparency = 1 })
     local miniLetter = new("TextLabel", { Parent = miniLogo, Size = UDim2.fromScale(1, 1), Text = win.Title:sub(1, 1):upper(), W = "SemiBold", TextSize = 20 })
     trackAccent(miniLetter, "TextColor3")
-    placeLogo(win, miniLogo, miniLetter, 34, 2)
+    placeLogo(win, miniLogo, miniLetter, 44, 2)
     new("TextLabel", { Parent = mini, LayoutOrder = 2, Size = UDim2.fromOffset(0, 44), AutomaticSize = Enum.AutomaticSize.X, Text = win.Title, W = "SemiBold", TextSize = 14 })
     makeIcon(mini, "maximize-2", 14, Theme.Sub, "+").LayoutOrder = 3
     do
@@ -5019,12 +5024,12 @@ function Window:AddSettingsTab()
     local theme = CL:CreateSection({ Name = "Theme", Icon = "palette" })
     local themeNames = {}
     for _, t in ipairs(Library.Themes) do table.insert(themeNames, t.Name) end
-    pref(theme, "AddDropdown", { Name = "Theme", Options = themeNames, Default = "Midnight", Tooltip = "Colors of the window, cards and text", Callback = function(v) win:SetTheme(v) end })
+    pref(theme, "AddDropdown", { Name = "Theme", Options = themeNames, Default = "Black", Tooltip = "Colors of the window, cards and text", Callback = function(v) win:SetTheme(v) end })
     local accNames = {}
     for _, a in ipairs(Library.Accents) do table.insert(accNames, a[1]) end
     local rainbow = false
     local customPicker
-    pref(theme, "AddDropdown", { Name = "Accent Color", Tooltip = "Main highlight color of the menu", Options = accNames, Default = "Blossom", Callback = function(v)
+    pref(theme, "AddDropdown", { Name = "Accent Color", Tooltip = "Main highlight color of the menu", Options = accNames, Default = "White", Callback = function(v)
         for _, a in ipairs(Library.Accents) do
             if a[1] == v then
                 Library:SetAccent(a[2])
