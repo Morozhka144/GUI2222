@@ -5019,7 +5019,10 @@ function Window:AddSettingsTab()
     -- Customization: everything about how the menu looks
     local ctab = self:CreateTab({ Name = "Customization", Icon = "brush" })
     self.CustomizationTab = ctab
-    local CL, CR = ctab:Column("left"), ctab:Column("right")
+    local looks = ctab:SubTab({ Name = "Interface", Icon = "palette" })
+    local chars = ctab:SubTab({ Name = "Characters", Icon = "image" })
+    local CL, CR = looks:Column("left"), looks:Column("right")
+    local AL, AR = chars:Column("left"), chars:Column("right")
 
     local theme = CL:CreateSection({ Name = "Theme", Icon = "palette" })
     local themeNames = {}
@@ -5068,16 +5071,6 @@ function Window:AddSettingsTab()
     pref(wsec, "AddDropdown", { Name = "Sidebar Side", Tooltip = "Put the tab list on the left or right", Options = { "Left", "Right" }, Default = "Left", Callback = function(v) win:SetSidebarSide(v) end })
     pref(wsec, "AddSlider", { Name = "Sidebar Width", Tooltip = "Width of the tab list", Min = 150, Max = 320, Default = SIDE_W, Suffix = " px", Callback = function(v) win:SetSidebarWidth(v) end })
     pref(wsec, "AddToggle", { Name = "Animated Border", NoFastMenu = true, Tooltip = "A glowing accent line running around the window", Callback = function(v) win:SetBorderGlow(v) end })
-    local bgNames = { "Off" }
-    for _, e in ipairs(Library.Art) do table.insert(bgNames, e.Name) end
-    local bgDrop, bgCustom
-    local function applyBg()
-        local custom = bgCustom and bgCustom.Get() or ""
-        win:SetWindowBackground(custom ~= "" and custom or (bgDrop and bgDrop.Get()) or "Off")
-    end
-    bgDrop = pref(wsec, "AddDropdown", { Name = "Picture", Options = bgNames, Default = "Off", Tooltip = "A see-through picture over the menu (clicks go through it)", Callback = function() applyBg() end })
-    bgCustom = pref(wsec, "AddTextbox", { Name = "Link", Placeholder = "rbxassetid / image url", Tooltip = "Your own picture; empty uses the one above", Callback = function() applyBg() end })
-    pref(wsec, "AddSlider", { Name = "Picture Visibility", Tooltip = "How visible the menu picture is", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
     pref(wsec, "AddToggle", { Name = "Background Blur", Tooltip = "Blurs the game behind the menu while it is open", NoFastMenu = true, Default = self.BlurEnabled, Callback = function(v) win:SetBlur(v) end })
     pref(wsec, "AddToggle", { Name = "Show Watermark", Tooltip = "Small panel at the top left with FPS, ping and time", NoFastMenu = true, Callback = function(v) win.Watermark.Visible = v end })
     if not IS_MOBILE then
@@ -5107,7 +5100,7 @@ function Window:AddSettingsTab()
     pref(mus, "AddSlider", { Name = "Music Volume", Tooltip = "Volume of the menu music", Min = 0, Max = 100, Default = 30, Suffix = "%", Callback = function(v) win.Music.SetVolume(v / 100) end })
 
     if #win.Art.List > 0 then
-        local art = CR:CreateSection({ Name = "Corner Art", Icon = "image" })
+        local art = AL:CreateSection({ Name = "Corner Art", Icon = "image" })
         pref(art, "AddDropdown", { Name = "Character Art", Tooltip = "Character standing in the screen corner. Random picks a new one every time the menu opens", Options = win.Art.Names(), Default = win.Art.Name, Callback = function(v) win:SetArt(v) end })
         pref(art, "AddDropdown", { Name = "Art Side", Tooltip = "Bottom-right or bottom-left corner", Options = { "Right", "Left" }, Default = win.Art.Side, Callback = function(v) win:SetArtSide(v) end })
         pref(art, "AddSlider", { Name = "Art Size", Min = 20, Max = 100, Default = win.Art.Size * 100, Suffix = "%", Tooltip = "Height as a share of the screen", Callback = function(v) win:SetArtSize(v / 100) end })
@@ -5117,13 +5110,25 @@ function Window:AddSettingsTab()
     end
     if #win.MenuArt.List > 0 then
         local ma = win.MenuArt
-        local msec = CR:CreateSection({ Name = "Menu Art", Icon = "layout-panel-top" })
+        local msec = AR:CreateSection({ Name = "Menu Art", Icon = "layout-panel-top" })
         pref(msec, "AddDropdown", { Name = "Menu Art", Options = ma.Names(), Default = ma.Name, Tooltip = "A character leaning on the top of the menu", Callback = function(v) win:SetMenuArt(v) end })
         pref(msec, "AddSlider", { Name = "Menu Art Position", Min = 0, Max = 100, Default = ma.Offset * 100, Suffix = "%", Tooltip = "Where along the top edge: 0% left, 100% right", Callback = function(v) win:SetMenuArtPosition(v / 100) end })
         pref(msec, "AddSlider", { Name = "Menu Art Size", Min = 15, Max = 150, Default = ma.Size * 100, Suffix = "%", Tooltip = "Width as a share of the window width", Callback = function(v) win:SetMenuArtSize(v / 100) end })
         pref(msec, "AddSlider", { Name = "Menu Art Overlap", Min = 0, Max = 80, Default = ma.Sink * 100, Suffix = "%", Tooltip = "How much of the picture sinks into the window (arms, elbows)", Callback = function(v) win:SetMenuArtOverlap(v / 100) end })
         pref(msec, "AddSlider", { Name = "Menu Art Opacity", Tooltip = "How see-through the art on the menu is", Min = 10, Max = 100, Default = ma.Opacity * 100, Suffix = "%", Callback = function(v) win:SetMenuArtOpacity(v / 100) end })
     end
+
+    local psec = AR:CreateSection({ Name = "Window Picture", Icon = "image-plus" })
+    local bgNames = { "Off" }
+    for _, e in ipairs(Library.Art) do table.insert(bgNames, e.Name) end
+    local bgDrop, bgCustom
+    local function applyBg()
+        local custom = bgCustom and bgCustom.Get() or ""
+        win:SetWindowBackground(custom ~= "" and custom or (bgDrop and bgDrop.Get()) or "Off")
+    end
+    bgDrop = pref(psec, "AddDropdown", { Name = "Picture", Options = bgNames, Default = "Off", Tooltip = "A see-through picture over the menu (clicks go through it)", Callback = function() applyBg() end })
+    bgCustom = pref(psec, "AddTextbox", { Name = "Link", Placeholder = "rbxassetid / image url", Tooltip = "Your own picture; empty uses the one above", Callback = function() applyBg() end })
+    pref(psec, "AddSlider", { Name = "Picture Visibility", Tooltip = "How visible the menu picture is", Min = 5, Max = 100, Default = 25, Suffix = "%", Callback = function(v) win:SetWindowBackgroundVisibility(v / 100) end })
 
     prefsReady = true
 
