@@ -3771,7 +3771,10 @@ function Library:CreateWindow(cfg)
     if cfg.OpenGuide ~= false then task.delay(1.7, function() if Library.Window == win then win:ShowOpenGuide(2) end end) end
 
     win.Effects.Set(prefs["Background Effect"] or cfg.Effect or "Fireflies")
-    win.Art.Set(prefs["Character Art"] or cfg.ArtDefault or (cfg.Art == false and "Off") or "Random")
+    -- default corner art: Marin (the one in the scarf), or Random when a script brings its own list without her
+    local defArt = "Random"
+    for _, e in ipairs(win.Art.List) do if e.Name == "Marin2" then defArt = "Marin2" end end
+    win.Art.Set(prefs["Character Art"] or cfg.ArtDefault or (cfg.Art == false and "Off") or defArt)
     win.MenuArt.Set(prefs["Menu Art"] or cfg.MenuArtDefault or (cfg.MenuArt == false and "Off") or "Random")
 
     win.Open = false
