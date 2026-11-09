@@ -29,9 +29,9 @@ end
 local Library = {
     Version = "2.0.0",
     Folder = "MoroLumina",
-    SoundNames = { "Soft", "Payment", "Tuntun", "Voiced", "Litvin", "Vibe", "Loader", "Warn", "Error" },
+    SoundNames = { "Nya", "Soft", "Payment", "Tuntun", "Voiced", "Litvin", "Vibe", "Loader", "Warn", "Error" },
     SoundFiles = {
-        Soft = "soft.mp3", Payment = "payment.mp3", Tuntun = "tuntun.mp3", Voiced = "voiced.mp3", Litvin = "Litvin.mp3",
+        Nya = "nya.mp3", Soft = "soft.mp3", Payment = "payment.mp3", Tuntun = "tuntun.mp3", Voiced = "voiced.mp3", Litvin = "Litvin.mp3",
         Vibe = "vibe.mp3", Loader = "Loader.mp3", Warn = "Warn.mp3", Error = "Error.mp3",
     },
     -- character art: PNGs in the repo's Art/ folder, kept in sync with MoroLumina/Art (like the sounds). This list
@@ -3197,7 +3197,7 @@ function Library:CreateWindow(cfg)
     FONT = fontFamily(prefs["Font"] or cfg.Font or "") or DEFAULT_FONT
     win.LoaderSound = cfg.LoaderSound ~= false
     if type(prefs["Startup Sound (Loader)"]) == "boolean" then win.LoaderSound = prefs["Startup Sound (Loader)"] end
-    win.NotifySoundName = cfg.NotifySoundName or "Soft"
+    win.NotifySoundName = cfg.NotifySoundName or "Nya"
     win.NotifySoundVolume = cfg.NotifySoundVolume or 0.5
     win.BlurEnabled = cfg.Blur ~= false
     win.BarWidth = BAR_W
